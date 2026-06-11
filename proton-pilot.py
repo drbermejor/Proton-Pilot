@@ -13,7 +13,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.7.1"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -1029,8 +1029,8 @@ def qt_main():
         def __init__(self):
             super().__init__()
             self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
-            self.resize(1050, 640)
-            self.setMinimumSize(860, 520)
+            self.resize(1280, 760)
+            self.setMinimumSize(980, 560)
             self.app_icon = first_existing(APP_ICON_CANDIDATES)
             if self.app_icon:
                 self.setWindowIcon(QtGui.QIcon(str(self.app_icon)))
@@ -1117,25 +1117,31 @@ def qt_main():
             layout.addWidget(hero)
 
             top = QtWidgets.QHBoxLayout()
+            top.setStretch(0, 0)
+            top.setStretch(1, 1)
             layout.addLayout(top)
 
             left = QtWidgets.QVBoxLayout()
-            top.addLayout(left, 2)
+            left_panel = QtWidgets.QWidget()
+            left_panel.setLayout(left)
+            left_panel.setFixedWidth(300)
+            top.addWidget(left_panel)
             right_scroll = QtWidgets.QScrollArea()
             right_scroll.setWidgetResizable(True)
+            right_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
             right_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
             right_panel = QtWidgets.QWidget()
             right = QtWidgets.QVBoxLayout(right_panel)
             right.setContentsMargins(2, 2, 8, 2)
             right.setSpacing(6)
             right_scroll.setWidget(right_panel)
-            top.addWidget(right_scroll, 3)
+            top.addWidget(right_scroll, 1)
 
             title = QtWidgets.QLabel("1. Juegos instalados")
             title.setStyleSheet("font-size: 18px; font-weight: 800;")
             left.addWidget(title)
             self.game_list = QtWidgets.QListWidget()
-            self.game_list.setMinimumWidth(250)
+            self.game_list.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
             for game in self.games:
                 item = QtWidgets.QListWidgetItem(f"{game['name']}  ({game['appid']})")
                 item.setData(QtCore.Qt.UserRole, game)
@@ -1166,10 +1172,10 @@ def qt_main():
 
             action_box = QtWidgets.QGroupBox("Acciones y recomendaciones")
             action_layout = QtWidgets.QHBoxLayout(action_box)
-            self.recommend_btn = QtWidgets.QPushButton("Ver recomendaciones ProtonDB")
+            self.recommend_btn = QtWidgets.QPushButton("Recomendaciones")
             self.open_protondb_btn = QtWidgets.QPushButton("Abrir ProtonDB")
-            self.apply_system_btn = QtWidgets.QPushButton("Aplicar recomendadas del sistema")
-            self.about_btn = QtWidgets.QPushButton("Acerca de / versiones")
+            self.apply_system_btn = QtWidgets.QPushButton("Aplicar sistema")
+            self.about_btn = QtWidgets.QPushButton("Acerca de")
             action_layout.addWidget(self.recommend_btn)
             action_layout.addWidget(self.open_protondb_btn)
             action_layout.addWidget(self.apply_system_btn)
@@ -1181,8 +1187,8 @@ def qt_main():
             preset_layout = QtWidgets.QHBoxLayout(preset_box)
             self.preset_combo = QtWidgets.QComboBox()
             self.apply_preset_btn = QtWidgets.QPushButton("Aplicar preset")
-            self.save_preset_btn = QtWidgets.QPushButton("Guardar como preset")
-            self.delete_preset_btn = QtWidgets.QPushButton("Borrar preset")
+            self.save_preset_btn = QtWidgets.QPushButton("Guardar")
+            self.delete_preset_btn = QtWidgets.QPushButton("Borrar")
             preset_layout.addWidget(self.preset_combo, 1)
             preset_layout.addWidget(self.apply_preset_btn)
             preset_layout.addWidget(self.save_preset_btn)
@@ -1194,7 +1200,7 @@ def qt_main():
             opts_layout.setHorizontalSpacing(8)
             opts_layout.setVerticalSpacing(6)
             row = col = 0
-            option_columns = 3
+            option_columns = 2
             for key, meta in OPTION_INFO.items():
                 label = meta["label"]
                 desc = meta["description"]
@@ -1265,6 +1271,7 @@ def qt_main():
             right.addWidget(QtWidgets.QLabel("Comando final"))
             self.command_edit = QtWidgets.QPlainTextEdit()
             self.command_edit.setPlaceholderText("%command%")
+            self.command_edit.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
             self.command_edit.setMaximumHeight(78)
             self.command_edit.setMaximumBlockCount(4)
             right.addWidget(self.command_edit, 1)
@@ -1472,7 +1479,8 @@ def qt_main():
                 "0.4.0 - Interfaz PySide6 mas clara.\n"
                 "0.5.0 - Logo, nombre, recomendaciones del sistema, hover help y README.\n"
                 "0.6.0 - Bazzite/SteamOS handheld, Legion Go 2, 800p/1200p y limites FPS.\n"
-                "0.7.0 - Resolucion real Gamescope, deteccion de monitor y presets nativos.\n\n"
+                "0.7.0 - Resolucion real Gamescope, deteccion de monitor y presets nativos.\n"
+                "0.7.1 - Layout de escritorio mas ancho, lista fija y opciones sin corte horizontal.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
