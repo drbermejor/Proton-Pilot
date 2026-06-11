@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Proton Pilot
+Comment=Per-game Steam/Proton launch profile manager
+Exec=proton-pilot
+Icon=proton-pilot
+Terminal=false
+Categories=Utility;Game;
