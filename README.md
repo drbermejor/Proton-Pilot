@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.6.1
+Version: 0.6.2
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -228,3 +228,5 @@ support or game-specific configuration.
   Gamescope profiles, frame-limit presets, and handheld documentation.
 - 0.6.1: Added dependency installation to `install.sh`, README logo, and Spanish
   project description.
+- 0.6.2: Made the main window more compact and scrollable for small screens and
+  handheld-style displays.

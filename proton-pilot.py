@@ -13,7 +13,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.6.1"
+APP_VERSION = "0.6.2"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -965,7 +965,8 @@ def qt_main():
         def __init__(self):
             super().__init__()
             self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
-            self.resize(1180, 780)
+            self.resize(1050, 640)
+            self.setMinimumSize(860, 520)
             self.app_icon = first_existing(APP_ICON_CANDIDATES)
             if self.app_icon:
                 self.setWindowIcon(QtGui.QIcon(str(self.app_icon)))
@@ -980,8 +981,8 @@ def qt_main():
 
             self.setStyleSheet(
                 """
-                QWidget { font-size: 14px; }
-                QLabel#appTitle { font-size: 24px; font-weight: 900; color: #17202a; }
+                QWidget { font-size: 13px; }
+                QLabel#appTitle { font-size: 22px; font-weight: 900; color: #17202a; }
                 QLabel#version { color: #607d8b; font-weight: 700; }
                 QLabel#sectionHint { color: #607d8b; }
                 QFrame#hero {
@@ -990,35 +991,35 @@ def qt_main():
                     border-radius: 10px;
                     padding: 8px;
                 }
-                QGroupBox { font-weight: 700; margin-top: 12px; }
+                QGroupBox { font-weight: 700; margin-top: 8px; }
                 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
                 QLabel#hint { color: #5f6368; }
                 QCheckBox[recommended="true"] {
                     background: #e8f5e9;
                     border: 1px solid #6abf69;
                     border-radius: 6px;
-                    padding: 6px;
+                    padding: 4px;
                     font-weight: 700;
                 }
                 QCheckBox[active="true"] {
                     background: #e3f2fd;
                     border: 1px solid #64b5f6;
                     border-radius: 6px;
-                    padding: 6px;
+                    padding: 4px;
                 }
                 QCheckBox[systemRecommended="true"] {
                     background: #fff8e1;
                     border: 1px solid #ffca28;
                     border-radius: 6px;
-                    padding: 6px;
+                    padding: 4px;
                     font-weight: 700;
                 }
                 QPlainTextEdit, QLineEdit, QListWidget {
                     border: 1px solid #c9cdd2;
                     border-radius: 6px;
-                    padding: 6px;
+                    padding: 4px;
                 }
-                QPushButton { padding: 8px 12px; border-radius: 6px; }
+                QPushButton { padding: 6px 10px; border-radius: 6px; }
                 QPushButton#apply { font-weight: 700; }
                 QLabel#optionDetail {
                     background: #f6f7f8;
@@ -1030,12 +1031,15 @@ def qt_main():
             )
 
             layout = QtWidgets.QVBoxLayout(self)
+            layout.setContentsMargins(10, 10, 10, 10)
+            layout.setSpacing(8)
             hero = QtWidgets.QFrame()
             hero.setObjectName("hero")
             hero_layout = QtWidgets.QHBoxLayout(hero)
+            hero_layout.setContentsMargins(8, 6, 8, 6)
             if self.app_icon:
                 icon = QtWidgets.QLabel()
-                pix = QtGui.QPixmap(str(self.app_icon)).scaled(64, 64, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+                pix = QtGui.QPixmap(str(self.app_icon)).scaled(48, 48, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
                 icon.setPixmap(pix)
                 hero_layout.addWidget(icon)
             title_col = QtWidgets.QVBoxLayout()
@@ -1053,13 +1057,21 @@ def qt_main():
 
             left = QtWidgets.QVBoxLayout()
             top.addLayout(left, 2)
-            right = QtWidgets.QVBoxLayout()
-            top.addLayout(right, 3)
+            right_scroll = QtWidgets.QScrollArea()
+            right_scroll.setWidgetResizable(True)
+            right_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+            right_panel = QtWidgets.QWidget()
+            right = QtWidgets.QVBoxLayout(right_panel)
+            right.setContentsMargins(2, 2, 8, 2)
+            right.setSpacing(6)
+            right_scroll.setWidget(right_panel)
+            top.addWidget(right_scroll, 3)
 
             title = QtWidgets.QLabel("1. Juegos instalados")
             title.setStyleSheet("font-size: 18px; font-weight: 800;")
             left.addWidget(title)
             self.game_list = QtWidgets.QListWidget()
+            self.game_list.setMinimumWidth(250)
             for game in self.games:
                 item = QtWidgets.QListWidgetItem(f"{game['name']}  ({game['appid']})")
                 item.setData(QtCore.Qt.UserRole, game)
@@ -1073,10 +1085,9 @@ def qt_main():
             sys_box = QtWidgets.QGroupBox("Recomendaciones segun tu sistema")
             sys_layout = QtWidgets.QVBoxLayout(sys_box)
             sys_summary = QtWidgets.QLabel(
-                f"{self.system['gpu_name']}\n"
-                f"OS: {self.system['os'].get('name') or 'desconocido'}\n"
-                f"Dispositivo: {self.system['device'].get('product_name') or 'desconocido'}\n"
-                f"Sesion: {self.system['session'].get('type') or 'desconocida'} / {self.system['session'].get('desktop') or 'desktop desconocido'}\n"
+                f"{self.system['os'].get('name') or 'OS desconocido'} - "
+                f"{self.system['session'].get('type') or 'sesion desconocida'} / {self.system['session'].get('desktop') or 'desktop desconocido'}\n"
+                f"{self.system['device'].get('product_name') or 'dispositivo desconocido'} - {self.system['gpu_name']}\n"
                 f"Tools: gamescope={'si' if self.system['tools'].get('gamescope') else 'no'}, "
                 f"gamemoderun={'si' if self.system['tools'].get('gamemoderun') else 'no'}, "
                 f"mangohud={'si' if self.system['tools'].get('mangohud') else 'no'}"
@@ -1116,7 +1127,10 @@ def qt_main():
 
             opts_box = QtWidgets.QGroupBox("Opciones que se aplicaran al lanzamiento")
             opts_layout = QtWidgets.QGridLayout(opts_box)
+            opts_layout.setHorizontalSpacing(8)
+            opts_layout.setVerticalSpacing(6)
             row = col = 0
+            option_columns = 3
             for key, meta in OPTION_INFO.items():
                 label = meta["label"]
                 desc = meta["description"]
@@ -1124,7 +1138,7 @@ def qt_main():
                 system_recommended = key in self.system_recommended
                 suffix = ""
                 if system_recommended:
-                    suffix = "  - recomendado para tu sistema"
+                    suffix = "  - sistema"
                 elif recommended:
                     suffix = "  - recomendado"
                 text = label + suffix
@@ -1139,7 +1153,7 @@ def qt_main():
                 self.checks[key] = cb
                 opts_layout.addWidget(cb, row, col)
                 col += 1
-                if col == 2:
+                if col == option_columns:
                     col = 0
                     row += 1
             right.addWidget(opts_box)
@@ -1164,7 +1178,8 @@ def qt_main():
             right.addWidget(QtWidgets.QLabel("Comando final"))
             self.command_edit = QtWidgets.QPlainTextEdit()
             self.command_edit.setPlaceholderText("%command%")
-            self.command_edit.setMaximumBlockCount(5)
+            self.command_edit.setMaximumHeight(78)
+            self.command_edit.setMaximumBlockCount(4)
             right.addWidget(self.command_edit, 1)
 
             buttons = QtWidgets.QHBoxLayout()
