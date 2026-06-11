@@ -13,7 +13,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.7.1"
+APP_VERSION = "0.7.2"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -62,6 +62,7 @@ HDR_ENGINE_LINES = {
 DEFAULT_APP_CONFIG = {
     "protondb_api": "https://protondb.max-p.me",
     "custom": {},
+    "manual_games": [],
     "presets": {},
     "last_selected": [],
 }
@@ -567,9 +568,56 @@ def installed_games(root):
                     "installdir": installdir,
                     "library": lib,
                     "manifest": manifest,
+                    "manual": False,
                 }
             )
     return sorted(games, key=lambda g: g["name"].casefold())
+
+
+def merged_games(root, config):
+    games = installed_games(root)
+    seen = {game["appid"] for game in games}
+    for manual in config.get("manual_games", []):
+        appid = str(manual.get("appid", "")).strip()
+        name = str(manual.get("name", "")).strip()
+        if not appid or not name or appid in seen:
+            continue
+        seen.add(appid)
+        games.append(
+            {
+                "appid": appid,
+                "name": name,
+                "installdir": "",
+                "library": root,
+                "manifest": None,
+                "manual": True,
+            }
+        )
+    return sorted(games, key=lambda g: g["name"].casefold())
+
+
+def find_game_icon(root, appid):
+    cache = root / "appcache" / "librarycache"
+    candidates = [
+        cache / f"{appid}_icon.jpg",
+        cache / f"{appid}_icon.png",
+        cache / appid / "icon.jpg",
+        cache / appid / "icon.png",
+        cache / f"{appid}_library_600x900.jpg",
+        cache / f"{appid}_header.jpg",
+    ]
+    icon = first_existing(candidates)
+    if icon:
+        return icon
+    app_cache = cache / appid
+    if app_cache.exists():
+        images = sorted(
+            [p for p in app_cache.glob("*") if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}],
+            key=lambda p: p.stat().st_size,
+        )
+        if images:
+            return images[0]
+    return None
 
 
 def localconfig_path(root):
@@ -1029,8 +1077,8 @@ def qt_main():
         def __init__(self):
             super().__init__()
             self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
-            self.resize(1280, 760)
-            self.setMinimumSize(980, 560)
+            self.resize(1320, 780)
+            self.setMinimumSize(1050, 600)
             self.app_icon = first_existing(APP_ICON_CANDIDATES)
             if self.app_icon:
                 self.setWindowIcon(QtGui.QIcon(str(self.app_icon)))
@@ -1039,7 +1087,7 @@ def qt_main():
             self.app_config = load_app_config()
             self.system = detect_system()
             self.system_recommended = system_recommended_keys(self.system)
-            self.games = installed_games(self.root)
+            self.games = merged_games(self.root, self.app_config)
             self.checks = {}
             self.current_game = None
 
@@ -1058,6 +1106,7 @@ def qt_main():
                 QGroupBox { font-weight: 700; margin-top: 8px; }
                 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
                 QLabel#hint { color: #5f6368; }
+                QListWidget#gameList::item { min-height: 34px; padding: 3px; }
                 QCheckBox[recommended="true"] {
                     background: #e8f5e9;
                     border: 1px solid #6abf69;
@@ -1078,6 +1127,11 @@ def qt_main():
                     padding: 4px;
                     font-weight: 700;
                 }
+                QCheckBox#launchOption {
+                    border-radius: 6px;
+                    padding: 7px;
+                    min-height: 24px;
+                }
                 QPlainTextEdit, QLineEdit, QListWidget {
                     border: 1px solid #c9cdd2;
                     border-radius: 6px;
@@ -1085,6 +1139,25 @@ def qt_main():
                 }
                 QPushButton { padding: 6px 10px; border-radius: 6px; }
                 QPushButton#apply { font-weight: 700; }
+                QPushButton#saveButton {
+                    background: #1f9d55;
+                    color: white;
+                    border: 1px solid #157a3d;
+                    font-weight: 900;
+                    padding: 8px 14px;
+                }
+                QPushButton#saveButton:hover { background: #187f45; }
+                QPushButton#clearButton {
+                    background: #ffe8e6;
+                    color: #9f1d17;
+                    border: 1px solid #ef9a9a;
+                    font-weight: 800;
+                    padding: 8px 14px;
+                }
+                QPushButton#clearButton:hover {
+                    background: #ffcdd2;
+                    color: #7f130f;
+                }
                 QLabel#optionDetail {
                     background: #f6f7f8;
                     border: 1px solid #d6d9dd;
@@ -1124,7 +1197,8 @@ def qt_main():
             left = QtWidgets.QVBoxLayout()
             left_panel = QtWidgets.QWidget()
             left_panel.setLayout(left)
-            left_panel.setFixedWidth(300)
+            left_panel.setMinimumWidth(260)
+            left_panel.setMaximumWidth(360)
             top.addWidget(left_panel)
             right_scroll = QtWidgets.QScrollArea()
             right_scroll.setWidgetResizable(True)
@@ -1141,15 +1215,24 @@ def qt_main():
             title.setStyleSheet("font-size: 18px; font-weight: 800;")
             left.addWidget(title)
             self.game_list = QtWidgets.QListWidget()
-            self.game_list.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+            self.game_list.setObjectName("gameList")
+            self.game_list.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+            self.game_list.setTextElideMode(QtCore.Qt.ElideNone)
+            self.game_list.setIconSize(QtCore.QSize(28, 28))
             for game in self.games:
                 item = QtWidgets.QListWidgetItem(f"{game['name']}  ({game['appid']})")
                 item.setData(QtCore.Qt.UserRole, game)
+                icon_path = find_game_icon(self.root, game["appid"])
+                if icon_path:
+                    item.setIcon(QtGui.QIcon(str(icon_path)))
                 self.game_list.addItem(item)
             left.addWidget(self.game_list, 1)
+            self.add_game_btn = QtWidgets.QPushButton("Añadir juego")
+            left.addWidget(self.add_game_btn)
 
             self.current_label = QtWidgets.QLabel("Selecciona un juego para ver sus opciones.")
             self.current_label.setObjectName("hint")
+            self.current_label.setWordWrap(True)
             right.addWidget(self.current_label)
 
             sys_box = QtWidgets.QGroupBox("Recomendaciones segun tu sistema")
@@ -1196,11 +1279,8 @@ def qt_main():
             right.addWidget(preset_box)
 
             opts_box = QtWidgets.QGroupBox("Opciones que se aplicaran al lanzamiento")
-            opts_layout = QtWidgets.QGridLayout(opts_box)
-            opts_layout.setHorizontalSpacing(8)
-            opts_layout.setVerticalSpacing(6)
-            row = col = 0
-            option_columns = 2
+            opts_layout = QtWidgets.QVBoxLayout(opts_box)
+            opts_layout.setSpacing(6)
             for key, meta in OPTION_INFO.items():
                 label = meta["label"]
                 desc = meta["description"]
@@ -1213,6 +1293,7 @@ def qt_main():
                     suffix = "  - recomendado"
                 text = label + suffix
                 cb = QtWidgets.QCheckBox(text)
+                cb.setObjectName("launchOption")
                 cb.setToolTip(f"{desc}\n\nAnade: {meta['tokens']}")
                 cb.setProperty("recommended", "true" if recommended else "false")
                 cb.setProperty("systemRecommended", "true" if system_recommended else "false")
@@ -1221,11 +1302,8 @@ def qt_main():
                 cb.stateChanged.connect(self.update_command)
                 cb.clicked.connect(lambda checked=False, k=key: self.show_option_detail(k))
                 self.checks[key] = cb
-                opts_layout.addWidget(cb, row, col)
-                col += 1
-                if col == option_columns:
-                    col = 0
-                    row += 1
+                opts_layout.addWidget(cb)
+            opts_layout.addStretch(1)
             right.addWidget(opts_box)
 
             self.option_detail = QtWidgets.QLabel("Pasa el cursor por encima de una opcion para ver que hace y que anade al lanzamiento.")
@@ -1279,8 +1357,9 @@ def qt_main():
             buttons = QtWidgets.QHBoxLayout()
             layout.addLayout(buttons)
             self.save_btn = QtWidgets.QPushButton("Guardar opciones")
-            self.save_btn.setObjectName("apply")
+            self.save_btn.setObjectName("saveButton")
             self.clear_btn = QtWidgets.QPushButton("Borrar opciones")
+            self.clear_btn.setObjectName("clearButton")
             self.reload_btn = QtWidgets.QPushButton("Recargar")
             buttons.addWidget(self.reload_btn)
             buttons.addStretch(1)
@@ -1288,6 +1367,7 @@ def qt_main():
             buttons.addWidget(self.save_btn)
 
             self.game_list.currentItemChanged.connect(self.select_game)
+            self.add_game_btn.clicked.connect(self.add_manual_game)
             self.recommend_btn.clicked.connect(self.show_recommendations)
             self.open_protondb_btn.clicked.connect(self.open_protondb)
             self.apply_system_btn.clicked.connect(self.apply_system_recommended)
@@ -1305,6 +1385,27 @@ def qt_main():
 
         def config_text(self):
             return self.config_path.read_text(errors="replace")
+
+        def populate_games(self, preferred_appid=None):
+            self.games = merged_games(self.root, self.app_config)
+            self.game_list.blockSignals(True)
+            self.game_list.clear()
+            preferred_row = 0
+            for row, game in enumerate(self.games):
+                label = f"{game['name']}  ({game['appid']})"
+                if game.get("manual"):
+                    label += "  - manual"
+                item = QtWidgets.QListWidgetItem(label)
+                item.setData(QtCore.Qt.UserRole, game)
+                icon_path = find_game_icon(self.root, game["appid"])
+                if icon_path:
+                    item.setIcon(QtGui.QIcon(str(icon_path)))
+                self.game_list.addItem(item)
+                if preferred_appid and game["appid"] == preferred_appid:
+                    preferred_row = row
+            self.game_list.blockSignals(False)
+            if self.game_list.count():
+                self.game_list.setCurrentRow(preferred_row)
 
         def select_game(self, item):
             if not item:
@@ -1337,6 +1438,40 @@ def qt_main():
             self.set_resolution_fields(res)
             self.refresh_presets()
             self.update_command()
+
+        def add_manual_game(self):
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Añadir juego manualmente")
+            dialog.resize(440, 160)
+            layout = QtWidgets.QFormLayout(dialog)
+            name_edit = QtWidgets.QLineEdit()
+            appid_edit = QtWidgets.QLineEdit()
+            appid_edit.setPlaceholderText("Ej: 1172710")
+            layout.addRow("Nombre:", name_edit)
+            layout.addRow("AppID:", appid_edit)
+            buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+            layout.addRow(buttons)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            if dialog.exec() != QtWidgets.QDialog.Accepted:
+                return
+            name = name_edit.text().strip()
+            appid = appid_edit.text().strip()
+            if not name or not appid:
+                QtWidgets.QMessageBox.warning(self, "Faltan datos", "Necesito nombre y AppID para añadir el juego.")
+                return
+            if not re.fullmatch(r"\d+", appid):
+                QtWidgets.QMessageBox.warning(self, "AppID no valido", "El AppID de Steam debe ser numerico.")
+                return
+            manual_games = self.app_config.setdefault("manual_games", [])
+            for game in self.games:
+                if game["appid"] == appid:
+                    QtWidgets.QMessageBox.information(self, "Ya existe", "Ese AppID ya esta en la lista.")
+                    self.populate_games(appid)
+                    return
+            manual_games.append({"appid": appid, "name": name})
+            save_app_config(self.app_config)
+            self.populate_games(appid)
 
         def selected_keys(self):
             return [key for key, cb in self.checks.items() if cb.isChecked()]
@@ -1480,7 +1615,8 @@ def qt_main():
                 "0.5.0 - Logo, nombre, recomendaciones del sistema, hover help y README.\n"
                 "0.6.0 - Bazzite/SteamOS handheld, Legion Go 2, 800p/1200p y limites FPS.\n"
                 "0.7.0 - Resolucion real Gamescope, deteccion de monitor y presets nativos.\n"
-                "0.7.1 - Layout de escritorio mas ancho, lista fija y opciones sin corte horizontal.\n\n"
+                "0.7.1 - Layout de escritorio mas ancho, lista fija y opciones sin corte horizontal.\n"
+                "0.7.2 - Opciones en lista vertical, iconos de juegos, juegos manuales y botones de accion claros.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
@@ -1561,12 +1697,34 @@ def qt_main():
         def clear(self):
             if not self.current_game:
                 return
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Borrar opciones de lanzamiento",
+                f"Esto borrara las opciones de lanzamiento guardadas para:\n\n{self.current_game['name']}\n\nContinuar?",
+            )
+            if reply != QtWidgets.QMessageBox.Yes:
+                return
+            if steam_is_running():
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Steam esta abierto",
+                    "Steam parece estar abierto. Si reescribe su configuracion al cerrar, podria perderse el cambio.\n\nBorrar igualmente?",
+                )
+                if reply != QtWidgets.QMessageBox.Yes:
+                    return
+            backup = set_launch_options(self.config_path, self.current_game["appid"], "")
             for cb in self.checks.values():
                 cb.setChecked(False)
             self.custom_pre.clear()
             self.custom_post.clear()
             self.set_resolution_fields(self.system.get("display", {}))
             self.command_edit.setPlainText("")
+            QtWidgets.QMessageBox.information(
+                self,
+                "Opciones borradas",
+                f"Opciones de lanzamiento borradas para {self.current_game['name']}.\n\nBackup:\n{backup}",
+            )
+            self.select_game(self.game_list.currentItem())
 
         def reload(self):
             self.select_game(self.game_list.currentItem())

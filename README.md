@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.7.1
+Version: 0.7.2
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -29,6 +29,7 @@ tocar `localconfig.vdf`.
 ## What It Does
 
 - Detects installed Steam games from local app manifests.
+- Lets you add a Steam game manually by name and AppID when local detection misses it.
 - Reads and writes Steam launch options in `localconfig.vdf`.
 - Creates a backup before writing changes.
 - Shows system-aware recommendations based on detected GPU, session type, and installed tools.
@@ -204,6 +205,15 @@ Close Steam before saving launch options when possible. Steam can rewrite
 - Yellow: recommended based on detected local hardware/session/tools.
 - Blue: option already detected in the current Steam launch command.
 
+## Interface Notes
+
+- The game list keeps a compact width and uses a horizontal scrollbar for long names.
+- Steam library icons are shown when they exist in Steam's local cache.
+- Launch options are displayed as a vertical list so each option is easier to scan.
+- `Guardar opciones` is highlighted in green.
+- `Borrar opciones` is highlighted in red and asks for confirmation before clearing
+  the saved Steam launch options for the selected game.
+
 ## Forcing Real Gamescope Resolution
 
 On KDE Wayland with fractional scaling, a 2560x1440 monitor at 125% scale may
@@ -249,3 +259,5 @@ support or game-specific configuration.
   detection, per-game native monitor presets, and UI fields for width/height/Hz.
 - 0.7.1: Improved desktop layout: fixed-width game list, wider startup window,
   no horizontal scroll on the options panel, and two-column option grid.
+- 0.7.2: Switched launch options to a vertical list, added Steam cached game
+  icons, manual game entries, clearer save/delete buttons, and delete confirmation.
