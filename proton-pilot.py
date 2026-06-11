@@ -13,7 +13,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.6.2"
+APP_VERSION = "0.7.0"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -113,6 +113,12 @@ OPTION_INFO = {
         "label": "Gamescope fullscreen",
         "description": "Ejecuta el juego dentro de Gamescope a pantalla completa. Necesario para HDR y util para aislar resolucion/modo de pantalla.",
         "tokens": "gamescope -f --",
+        "recommended": False,
+    },
+    "REALRES": {
+        "label": "Resolucion real Gamescope",
+        "description": "Fuerza a Gamescope a exponer la resolucion fisica del monitor al juego con -W/-H y -w/-h. Util con escalado fraccional de KDE/Wayland.",
+        "tokens": "gamescope -W <monitor_w> -H <monitor_h> -w <game_w> -h <game_h> -r <hz>",
         "recommended": False,
     },
     "HANDHELD800P": {
@@ -318,6 +324,26 @@ def ensure_game_builtin_presets(config, appid):
         game_presets.setdefault(name, payload)
 
 
+def ensure_display_preset(config, appid, display):
+    width = int(display.get("width") or 0)
+    height = int(display.get("height") or 0)
+    refresh = int(display.get("refresh") or 0)
+    if not width or not height:
+        return
+    refresh_part = f" -r {refresh}" if refresh else ""
+    name = f"Monitor nativo Gamescope: {width}x{height}" + (f"@{refresh}" if refresh else "")
+    config.setdefault("presets", {}).setdefault(appid, {}).setdefault(
+        name,
+        {
+            "options": ["REALRES", "GAMEMODE", "MANGOHUD"],
+            "custom_pre": "",
+            "custom_post": "",
+            "gamescope_res": {"width": width, "height": height, "refresh": refresh},
+            "command": f"gamescope -f --force-windows-fullscreen -W {width} -H {height} -w {width} -h {height}{refresh_part} --mangoapp -- gamemoderun %command%",
+        },
+    )
+
+
 def first_existing(paths):
     for path in paths:
         if path.exists():
@@ -361,6 +387,7 @@ def detect_system():
         "mangohud": bool(shutil.which("mangohud")),
         "xdg-open": bool(shutil.which("xdg-open")),
     }
+    display = detect_primary_display()
     wsi = bool(list(Path("/usr/share/vulkan").glob("**/*gamescope*wsi*.json")))
     os_id = os_release.get("ID", "").lower()
     os_name = os_release.get("PRETTY_NAME") or os_release.get("NAME") or "OS desconocido"
@@ -374,6 +401,7 @@ def detect_system():
         "gpu_name": gpu_name,
         "session": session,
         "tools": tools,
+        "display": display,
         "gamescope_wsi": wsi,
         "os": {"id": os_id, "name": os_name},
         "device": {
@@ -386,6 +414,33 @@ def detect_system():
             "is_handheld": is_handheld,
         },
     }
+
+
+def detect_primary_display():
+    xrandr = command_output(["xrandr", "--current"])
+    match = re.search(r"^(\S+)\s+connected\s+primary\s+(\d+)x(\d+)\+\d+\+\d+", xrandr, re.M)
+    if not match:
+        match = re.search(r"^(\S+)\s+connected\s+(\d+)x(\d+)\+\d+\+\d+", xrandr, re.M)
+    if match:
+        width = int(match.group(2))
+        height = int(match.group(3))
+        refresh = None
+        mode_line = re.search(rf"^\s*{width}x{height}\s+([0-9.]+)\*", xrandr, re.M)
+        if mode_line:
+            refresh = round(float(mode_line.group(1)))
+        return {"name": match.group(1), "width": width, "height": height, "refresh": refresh}
+
+    kscreen = command_output(["kscreen-doctor", "-o"])
+    mode = re.search(r"Modes:.*?(\d+):\x1b\[[^m]*m?(\d+)x(\d+)@([0-9.]+)\*", kscreen, re.S)
+    name = re.search(r"Output:\s*\d+\s+(\S+)", re.sub(r"\x1b\[[0-9;]*m", "", kscreen))
+    if mode:
+        return {
+            "name": name.group(1) if name else "",
+            "width": int(mode.group(2)),
+            "height": int(mode.group(3)),
+            "refresh": round(float(mode.group(4))),
+        }
+    return {"name": "", "width": 0, "height": 0, "refresh": None}
 
 
 def os_environ(key):
@@ -625,6 +680,7 @@ def detect_flags(current):
         "GAMEMODE": "gamemoderun" in current,
         "MANGOHUD": "mangohud" in current or "--mangoapp" in current,
         "GAMESCOPE": "gamescope" in current,
+        "REALRES": "-W " in current and "-H " in current and "-w " in current and "-h " in current,
         "HANDHELD800P": "-w 1280" in current and "-h 800" in current,
         "HANDHELD1200P": "-w 1920" in current and "-h 1200" in current,
         "CAP60": "--framerate-limit 60" in current,
@@ -640,9 +696,9 @@ def detect_flags(current):
     }
 
 
-def compose_launch(selected, custom_pre="", custom_post=""):
+def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
     selected = set(selected)
-    gamescope_options = {"HDR", "GAMESCOPE", "ADAPTIVE", "HANDHELD800P", "HANDHELD1200P", "CAP60", "CAP72", "GSFSR", "GSNIS"}
+    gamescope_options = {"HDR", "GAMESCOPE", "REALRES", "ADAPTIVE", "HANDHELD800P", "HANDHELD1200P", "CAP60", "CAP72", "GSFSR", "GSNIS"}
     use_gamescope = bool(gamescope_options & selected)
     parts = []
     post_args = []
@@ -670,7 +726,15 @@ def compose_launch(selected, custom_pre="", custom_post=""):
 
     if use_gamescope:
         flags = ["-f"]
-        if "HANDHELD1200P" in selected:
+        if "REALRES" in selected and gamescope_res:
+            width = str(gamescope_res.get("width") or "").strip()
+            height = str(gamescope_res.get("height") or "").strip()
+            refresh = str(gamescope_res.get("refresh") or "").strip()
+            if width and height:
+                flags.extend(["--force-windows-fullscreen", "-W", width, "-H", height, "-w", width, "-h", height])
+            if refresh:
+                flags.extend(["-r", refresh])
+        elif "HANDHELD1200P" in selected:
             flags.extend(["-w", "1920", "-h", "1200"])
         elif "HANDHELD800P" in selected:
             flags.extend(["-w", "1280", "-h", "800"])
@@ -1163,6 +1227,29 @@ def qt_main():
             self.option_detail.setWordWrap(True)
             right.addWidget(self.option_detail)
 
+            res_box = QtWidgets.QGroupBox("Resolucion Gamescope")
+            res_layout = QtWidgets.QHBoxLayout(res_box)
+            self.real_width = QtWidgets.QSpinBox()
+            self.real_width.setRange(0, 10000)
+            self.real_width.setSuffix(" px")
+            self.real_height = QtWidgets.QSpinBox()
+            self.real_height.setRange(0, 10000)
+            self.real_height.setSuffix(" px")
+            self.real_refresh = QtWidgets.QSpinBox()
+            self.real_refresh.setRange(0, 1000)
+            self.real_refresh.setSuffix(" Hz")
+            self.detect_display_btn = QtWidgets.QPushButton("Usar monitor principal")
+            for widget in (self.real_width, self.real_height, self.real_refresh):
+                widget.valueChanged.connect(self.update_command)
+            res_layout.addWidget(QtWidgets.QLabel("Ancho"))
+            res_layout.addWidget(self.real_width)
+            res_layout.addWidget(QtWidgets.QLabel("Alto"))
+            res_layout.addWidget(self.real_height)
+            res_layout.addWidget(QtWidgets.QLabel("Hz"))
+            res_layout.addWidget(self.real_refresh)
+            res_layout.addWidget(self.detect_display_btn)
+            right.addWidget(res_box)
+
             custom_box = QtWidgets.QGroupBox("Ajustes personalizados")
             custom_layout = QtWidgets.QFormLayout(custom_box)
             self.custom_pre = QtWidgets.QLineEdit()
@@ -1198,6 +1285,7 @@ def qt_main():
             self.open_protondb_btn.clicked.connect(self.open_protondb)
             self.apply_system_btn.clicked.connect(self.apply_system_recommended)
             self.about_btn.clicked.connect(self.show_about)
+            self.detect_display_btn.clicked.connect(self.use_detected_display)
             self.apply_preset_btn.clicked.connect(self.apply_preset)
             self.save_preset_btn.clicked.connect(self.save_preset)
             self.delete_preset_btn.clicked.connect(self.delete_preset)
@@ -1216,6 +1304,7 @@ def qt_main():
                 return
             self.current_game = item.data(QtCore.Qt.UserRole)
             ensure_game_builtin_presets(self.app_config, self.current_game["appid"])
+            ensure_display_preset(self.app_config, self.current_game["appid"], self.system.get("display", {}))
             save_app_config(self.app_config)
             current = current_launch_options(self.config_text(), self.current_game["appid"])
             self.current_label.setText(
@@ -1237,6 +1326,8 @@ def qt_main():
             self.custom_post.setText(custom.get("post", ""))
             self.custom_pre.blockSignals(False)
             self.custom_post.blockSignals(False)
+            res = custom.get("gamescope_res") or self.system.get("display", {})
+            self.set_resolution_fields(res)
             self.refresh_presets()
             self.update_command()
 
@@ -1266,8 +1357,31 @@ def qt_main():
             )
 
         def update_command(self):
-            command = compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text())
+            command = compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text(), self.gamescope_resolution())
             self.command_edit.setPlainText(command)
+
+        def gamescope_resolution(self):
+            return {
+                "width": self.real_width.value(),
+                "height": self.real_height.value(),
+                "refresh": self.real_refresh.value() or "",
+            }
+
+        def set_resolution_fields(self, res):
+            for widget in (self.real_width, self.real_height, self.real_refresh):
+                widget.blockSignals(True)
+            self.real_width.setValue(int(res.get("width") or 0))
+            self.real_height.setValue(int(res.get("height") or 0))
+            self.real_refresh.setValue(int(res.get("refresh") or 0))
+            for widget in (self.real_width, self.real_height, self.real_refresh):
+                widget.blockSignals(False)
+
+        def use_detected_display(self):
+            display = detect_primary_display()
+            self.set_resolution_fields(display)
+            self.checks["REALRES"].setChecked(True)
+            self.show_option_detail("REALRES")
+            self.update_command()
 
         def game_presets(self):
             if not self.current_game:
@@ -1290,6 +1404,7 @@ def qt_main():
                 "options": self.selected_keys(),
                 "custom_pre": self.custom_pre.text(),
                 "custom_post": self.custom_post.text(),
+                "gamescope_res": self.gamescope_resolution(),
                 "command": self.command_edit.toPlainText().strip(),
             }
 
@@ -1305,6 +1420,7 @@ def qt_main():
                 cb.setChecked(key in selected)
             self.custom_pre.setText(preset.get("custom_pre", ""))
             self.custom_post.setText(preset.get("custom_post", ""))
+            self.set_resolution_fields(preset.get("gamescope_res") or self.system.get("display", {}))
             command = preset.get("command", "")
             if command:
                 self.command_edit.setPlainText(command)
@@ -1355,7 +1471,8 @@ def qt_main():
                 "0.3.0 - ProtonDB, personalizados y presets.\n"
                 "0.4.0 - Interfaz PySide6 mas clara.\n"
                 "0.5.0 - Logo, nombre, recomendaciones del sistema, hover help y README.\n"
-                "0.6.0 - Bazzite/SteamOS handheld, Legion Go 2, 800p/1200p y limites FPS.\n\n"
+                "0.6.0 - Bazzite/SteamOS handheld, Legion Go 2, 800p/1200p y limites FPS.\n"
+                "0.7.0 - Resolucion real Gamescope, deteccion de monitor y presets nativos.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
@@ -1406,6 +1523,7 @@ def qt_main():
             custom = self.app_config.setdefault("custom", {}).setdefault(self.current_game["appid"], {})
             custom["pre"] = self.custom_pre.text()
             custom["post"] = self.custom_post.text()
+            custom["gamescope_res"] = self.gamescope_resolution()
             save_app_config(self.app_config)
 
         def save(self):
@@ -1439,6 +1557,7 @@ def qt_main():
                 cb.setChecked(False)
             self.custom_pre.clear()
             self.custom_post.clear()
+            self.set_resolution_fields(self.system.get("display", {}))
             self.command_edit.setPlainText("")
 
         def reload(self):

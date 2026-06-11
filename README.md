@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.6.2
+Version: 0.7.0
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -33,6 +33,7 @@ tocar `localconfig.vdf`.
 - Creates a backup before writing changes.
 - Shows system-aware recommendations based on detected GPU, session type, and installed tools.
 - Detects Bazzite, SteamOS-style sessions, Lenovo Legion Go devices, and handheld-friendly setups.
+- Detects the primary monitor resolution and can force Gamescope to expose the real physical resolution to the game.
 - Provides per-game presets stored in a JSON config file.
 - Lets you save, apply, and delete your own presets.
 - Shows ProtonDB community recommendations when available.
@@ -129,7 +130,7 @@ Steam launch options.
 
 ## Legion Go 2 / Bazzite / SteamOS Compatibility
 
-Proton Pilot 0.6.0 includes handheld-aware detection and presets for devices
+Proton Pilot includes handheld-aware detection and presets for devices
 like the Lenovo Legion Go 2 running Bazzite or SteamOS-style environments.
 
 The Legion Go 2 class display is commonly reported as an 8.8-inch OLED 16:10
@@ -203,6 +204,20 @@ Close Steam before saving launch options when possible. Steam can rewrite
 - Yellow: recommended based on detected local hardware/session/tools.
 - Blue: option already detected in the current Steam launch command.
 
+## Forcing Real Gamescope Resolution
+
+On KDE Wayland with fractional scaling, a 2560x1440 monitor at 125% scale may
+appear to games as a logical 2048x1152 surface. Proton Pilot can now force
+Gamescope to expose the real monitor resolution using:
+
+```bash
+gamescope -f --force-windows-fullscreen -W 2560 -H 1440 -w 2560 -h 1440 -r 180 -- ...
+```
+
+Use the `Resolucion real Gamescope` option and press `Usar monitor principal`.
+The app will fill the detected width, height, and refresh rate. It also creates
+a per-game preset named `Monitor nativo Gamescope: <resolution>`.
+
 ## Important Notes
 
 `PROTON_FSR4_UPGRADE=1` attempts to upgrade compatible FSR 3.1 paths to FSR4 in
@@ -230,3 +245,5 @@ support or game-specific configuration.
   project description.
 - 0.6.2: Made the main window more compact and scrollable for small screens and
   handheld-style displays.
+- 0.7.0: Added real-monitor Gamescope resolution forcing with automatic display
+  detection, per-game native monitor presets, and UI fields for width/height/Hz.
