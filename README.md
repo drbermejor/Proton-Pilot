@@ -1,6 +1,6 @@
 # Proton Pilot
 
-Version: 0.5.0
+Version: 0.6.0
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -12,6 +12,7 @@ GameMode, MangoHud, HDR, VKD3D-Proton, and experimental options such as FSR4 upg
 - Reads and writes Steam launch options in `localconfig.vdf`.
 - Creates a backup before writing changes.
 - Shows system-aware recommendations based on detected GPU, session type, and installed tools.
+- Detects Bazzite, SteamOS-style sessions, Lenovo Legion Go devices, and handheld-friendly setups.
 - Provides per-game presets stored in a JSON config file.
 - Lets you save, apply, and delete your own presets.
 - Shows ProtonDB community recommendations when available.
@@ -63,6 +64,59 @@ On Arch/CachyOS:
 ```bash
 sudo pacman -S python-pyside6 gamescope gamemode mangohud
 ```
+
+On Bazzite / Fedora Atomic-style systems, first check whether PySide6 is already
+available:
+
+```bash
+python3 -c "import PySide6"
+```
+
+If it is missing, install it through your OS-supported package flow. On many
+Fedora-based immutable systems this is:
+
+```bash
+rpm-ostree install python3-pyside6
+systemctl reboot
+```
+
+SteamOS/Bazzite Gaming Mode normally already handles display modes, TDP, frame
+limits, and overlays at the session level. Proton Pilot only edits per-game
+Steam launch options.
+
+## Legion Go 2 / Bazzite / SteamOS Compatibility
+
+Proton Pilot 0.6.0 includes handheld-aware detection and presets for devices
+like the Lenovo Legion Go 2 running Bazzite or SteamOS-style environments.
+
+The Legion Go 2 class display is commonly reported as an 8.8-inch OLED 16:10
+panel at 1920x1200 with up to 144 Hz and VRR. Proton Pilot therefore adds:
+
+- `Handheld bateria: 800p / 60 FPS`
+- `Handheld equilibrado: 800p / 72 FPS`
+- `Legion Go 2 nativo: 1200p / 72 FPS`
+- `Legion Go 2 OLED HDR`
+- `Legion Go 2 FSR4 + Wayland`
+
+The 800p profiles use:
+
+```bash
+gamescope -f -w 1280 -h 800
+```
+
+The native profile uses:
+
+```bash
+gamescope -f -w 1920 -h 1200
+```
+
+The app recommends handheld profiles when it detects Bazzite, SteamOS,
+Gamescope sessions, or Lenovo Legion Go hardware. It does not modify BIOS,
+TDP, fan curves, controller firmware, or system-level handheld services.
+
+HDR on handheld Linux setups is still game, compositor, display, and OS-version
+dependent. The HDR preset enables the launch path, but you may still need HDR
+enabled in the OS/session and in the game.
 
 ## Uninstall
 
@@ -127,3 +181,5 @@ support or game-specific configuration.
 - 0.4.0: Rebuilt as a PySide6 GUI with clearer panels and recommendations.
 - 0.5.0: Renamed to Proton Pilot, added custom logo, system-aware recommendations,
   hover descriptions, FSR4/Wayland options, README, and versioning.
+- 0.6.0: Added Bazzite/SteamOS/handheld detection, Legion Go 2 presets, 800p/1200p
+  Gamescope profiles, frame-limit presets, and handheld documentation.

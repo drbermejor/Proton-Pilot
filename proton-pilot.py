@@ -13,9 +13,12 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.5.0"
+APP_VERSION = "0.6.0"
 APP_DIR = Path(__file__).resolve().parent
-APP_ICON = APP_DIR / "proton-pilot-assets/proton-pilot.png"
+APP_ICON_CANDIDATES = [
+    APP_DIR / "assets/proton-pilot.png",
+    APP_DIR / "proton-pilot-assets/proton-pilot.png",
+]
 APP_CONFIG_DIR = HOME / ".config/proton-pilot"
 APP_CONFIG_FILE = APP_CONFIG_DIR / "config.json"
 LEGACY_CONFIG_FILE = HOME / ".config/steam-game-options/config.json"
@@ -110,6 +113,42 @@ OPTION_INFO = {
         "label": "Gamescope fullscreen",
         "description": "Ejecuta el juego dentro de Gamescope a pantalla completa. Necesario para HDR y util para aislar resolucion/modo de pantalla.",
         "tokens": "gamescope -f --",
+        "recommended": False,
+    },
+    "HANDHELD800P": {
+        "label": "Handheld 800p",
+        "description": "Ejecuta el juego a 1280x800 dentro de Gamescope. Perfil util para Legion Go 2, SteamOS/Bazzite y juegos pesados.",
+        "tokens": "gamescope -f -w 1280 -h 800 --",
+        "recommended": False,
+    },
+    "HANDHELD1200P": {
+        "label": "Handheld 1200p nativo",
+        "description": "Ejecuta el juego a 1920x1200 dentro de Gamescope, pensado para la pantalla 16:10 de Legion Go 2.",
+        "tokens": "gamescope -f -w 1920 -h 1200 --",
+        "recommended": False,
+    },
+    "CAP60": {
+        "label": "Limite 60 FPS",
+        "description": "Anade limite simple de 60 FPS en Gamescope para bajar consumo y estabilizar frametime.",
+        "tokens": "gamescope --framerate-limit 60",
+        "recommended": False,
+    },
+    "CAP72": {
+        "label": "Limite 72 FPS",
+        "description": "Anade limite simple de 72 FPS en Gamescope. Encaja bien con pantallas de 144 Hz al dividir por dos.",
+        "tokens": "gamescope --framerate-limit 72",
+        "recommended": False,
+    },
+    "GSFSR": {
+        "label": "Escalado Gamescope FSR",
+        "description": "Usa el escalador FSR 1.0 de Gamescope para subir desde una resolucion menor. No es FSR2/3/4 del juego.",
+        "tokens": "gamescope -F fsr --sharpness 5",
+        "recommended": False,
+    },
+    "GSNIS": {
+        "label": "Escalado Gamescope NIS",
+        "description": "Usa NVIDIA Image Scaling en Gamescope. Puede gustar mas o menos que FSR segun juego/pantalla.",
+        "tokens": "gamescope -F nis --sharpness 5",
         "recommended": False,
     },
     "ADAPTIVE": {
@@ -241,6 +280,44 @@ def ensure_builtin_presets(config):
         dune.setdefault(name, payload)
 
 
+def ensure_game_builtin_presets(config, appid):
+    game_presets = config.setdefault("presets", {}).setdefault(appid, {})
+    builtins = {
+        "Handheld bateria: 800p / 60 FPS": {
+            "options": ["HANDHELD800P", "CAP60", "GAMEMODE", "MANGOHUD"],
+            "custom_pre": "",
+            "custom_post": "",
+            "command": "gamescope -f -w 1280 -h 800 --framerate-limit 60 --mangoapp -- gamemoderun %command%",
+        },
+        "Handheld equilibrado: 800p / 72 FPS": {
+            "options": ["HANDHELD800P", "CAP72", "GAMEMODE", "MANGOHUD"],
+            "custom_pre": "",
+            "custom_post": "",
+            "command": "gamescope -f -w 1280 -h 800 --framerate-limit 72 --mangoapp -- gamemoderun %command%",
+        },
+        "Legion Go 2 nativo: 1200p / 72 FPS": {
+            "options": ["HANDHELD1200P", "CAP72", "GAMEMODE", "MANGOHUD"],
+            "custom_pre": "",
+            "custom_post": "",
+            "command": "gamescope -f -w 1920 -h 1200 --framerate-limit 72 --mangoapp -- gamemoderun %command%",
+        },
+        "Legion Go 2 OLED HDR": {
+            "options": ["HDR", "PROTONHDR", "HANDHELD1200P", "ADAPTIVE", "GAMEMODE", "MANGOHUD"],
+            "custom_pre": "",
+            "custom_post": "",
+            "command": "PROTON_ENABLE_HDR=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f -w 1920 -h 1200 --hdr-enabled --mangoapp --adaptive-sync -- gamemoderun %command%",
+        },
+        "Legion Go 2 FSR4 + Wayland": {
+            "options": ["FSR4", "WAYLAND", "HANDHELD800P", "CAP72", "GAMEMODE", "MANGOHUD"],
+            "custom_pre": "",
+            "custom_post": "",
+            "command": "PROTON_ENABLE_WAYLAND=1 PROTON_FSR4_UPGRADE=1 gamescope -f -w 1280 -h 800 --framerate-limit 72 --mangoapp -- gamemoderun %command%",
+        },
+    }
+    for name, payload in builtins.items():
+        game_presets.setdefault(name, payload)
+
+
 def first_existing(paths):
     for path in paths:
         if path.exists():
@@ -258,6 +335,10 @@ def command_output(args):
 
 def detect_system():
     lspci = command_output(["lspci", "-nnk"])
+    os_release = read_os_release()
+    product_name = read_text_file("/sys/class/dmi/id/product_name")
+    product_version = read_text_file("/sys/class/dmi/id/product_version")
+    product_family = read_text_file("/sys/class/dmi/id/product_family")
     gpu = "unknown"
     gpu_name = "GPU no detectada"
     if re.search(r"NVIDIA", lspci, re.I):
@@ -281,11 +362,57 @@ def detect_system():
         "xdg-open": bool(shutil.which("xdg-open")),
     }
     wsi = bool(list(Path("/usr/share/vulkan").glob("**/*gamescope*wsi*.json")))
-    return {"gpu": gpu, "gpu_name": gpu_name, "session": session, "tools": tools, "gamescope_wsi": wsi}
+    os_id = os_release.get("ID", "").lower()
+    os_name = os_release.get("PRETTY_NAME") or os_release.get("NAME") or "OS desconocido"
+    product_blob = " ".join([product_name, product_version, product_family]).lower()
+    is_bazzite = "bazzite" in os_id or "bazzite" in os_name.lower()
+    is_steamos = "steamos" in os_id or "steam os" in os_name.lower() or "steamos" in os_name.lower()
+    is_legion_go = "legion go" in product_blob or "83e1" in product_blob or "8asp" in product_blob
+    is_handheld = is_bazzite or is_steamos or is_legion_go or session.get("desktop", "").lower() == "gamescope"
+    return {
+        "gpu": gpu,
+        "gpu_name": gpu_name,
+        "session": session,
+        "tools": tools,
+        "gamescope_wsi": wsi,
+        "os": {"id": os_id, "name": os_name},
+        "device": {
+            "product_name": product_name,
+            "product_version": product_version,
+            "product_family": product_family,
+            "is_bazzite": is_bazzite,
+            "is_steamos": is_steamos,
+            "is_legion_go": is_legion_go,
+            "is_handheld": is_handheld,
+        },
+    }
 
 
 def os_environ(key):
     return os.environ.get(key, "")
+
+
+def read_text_file(path):
+    try:
+        return Path(path).read_text(errors="replace").strip()
+    except OSError:
+        return ""
+
+
+def read_os_release():
+    data = {}
+    for path in ("/etc/os-release", "/usr/lib/os-release"):
+        text = read_text_file(path)
+        if not text:
+            continue
+        for line in text.splitlines():
+            if "=" not in line or line.startswith("#"):
+                continue
+            key, value = line.split("=", 1)
+            data[key] = value.strip().strip('"')
+        if data:
+            break
+    return data
 
 
 def system_recommended_keys(system):
@@ -296,6 +423,9 @@ def system_recommended_keys(system):
         keys.add("MANGOHUD")
     if system["session"].get("type") == "wayland":
         keys.add("WAYLAND")
+    if system.get("device", {}).get("is_handheld"):
+        keys.add("HANDHELD800P")
+        keys.add("CAP60")
     if system["gpu"] == "amd":
         keys.add("FSR4")
     if system["gpu"] == "nvidia":
@@ -313,6 +443,14 @@ def recommendation_reasons(system):
         reasons.append("Sesion Wayland detectada: Proton Wayland puede merecer prueba por juego.")
     if system["tools"].get("gamescope") and system["gamescope_wsi"]:
         reasons.append("Gamescope + WSI detectados: HDR via Gamescope esta disponible.")
+    if system.get("device", {}).get("is_bazzite"):
+        reasons.append("Bazzite detectado: presets handheld y Gamescope encajan bien con Gaming Mode.")
+    if system.get("device", {}).get("is_steamos"):
+        reasons.append("SteamOS detectado: usa perfiles por juego y evita tocar ajustes globales desde la app.")
+    if system.get("device", {}).get("is_legion_go"):
+        reasons.append("Lenovo Legion Go detectado: 1280x800 ahorra bateria; 1920x1200 usa la pantalla nativa.")
+    elif system.get("device", {}).get("is_handheld"):
+        reasons.append("Dispositivo handheld detectado: 800p + limite FPS suele mejorar bateria y estabilidad.")
     if system["gpu"] == "amd":
         reasons.append("GPU AMD detectada: FSR4 upgrade puede merecer prueba en juegos compatibles.")
     if system["gpu"] == "nvidia":
@@ -487,6 +625,12 @@ def detect_flags(current):
         "GAMEMODE": "gamemoderun" in current,
         "MANGOHUD": "mangohud" in current or "--mangoapp" in current,
         "GAMESCOPE": "gamescope" in current,
+        "HANDHELD800P": "-w 1280" in current and "-h 800" in current,
+        "HANDHELD1200P": "-w 1920" in current and "-h 1200" in current,
+        "CAP60": "--framerate-limit 60" in current,
+        "CAP72": "--framerate-limit 72" in current,
+        "GSFSR": "-F fsr" in current,
+        "GSNIS": "-F nis" in current,
         "ADAPTIVE": "--adaptive-sync" in current,
         "UEHDR": False,
         "NODXR": "VKD3D_CONFIG=nodxr" in current,
@@ -498,7 +642,8 @@ def detect_flags(current):
 
 def compose_launch(selected, custom_pre="", custom_post=""):
     selected = set(selected)
-    use_gamescope = bool({"HDR", "GAMESCOPE", "ADAPTIVE"} & selected)
+    gamescope_options = {"HDR", "GAMESCOPE", "ADAPTIVE", "HANDHELD800P", "HANDHELD1200P", "CAP60", "CAP72", "GSFSR", "GSNIS"}
+    use_gamescope = bool(gamescope_options & selected)
     parts = []
     post_args = []
     if custom_pre.strip():
@@ -525,6 +670,18 @@ def compose_launch(selected, custom_pre="", custom_post=""):
 
     if use_gamescope:
         flags = ["-f"]
+        if "HANDHELD1200P" in selected:
+            flags.extend(["-w", "1920", "-h", "1200"])
+        elif "HANDHELD800P" in selected:
+            flags.extend(["-w", "1280", "-h", "800"])
+        if "CAP72" in selected:
+            flags.extend(["--framerate-limit", "72"])
+        elif "CAP60" in selected:
+            flags.extend(["--framerate-limit", "60"])
+        if "GSFSR" in selected:
+            flags.extend(["-F", "fsr", "--sharpness", "5"])
+        elif "GSNIS" in selected:
+            flags.extend(["-F", "nis", "--sharpness", "5"])
         if "HDR" in selected:
             flags.append("--hdr-enabled")
         if "MANGOHUD" in selected:
@@ -809,8 +966,9 @@ def qt_main():
             super().__init__()
             self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
             self.resize(1180, 780)
-            if APP_ICON.exists():
-                self.setWindowIcon(QtGui.QIcon(str(APP_ICON)))
+            self.app_icon = first_existing(APP_ICON_CANDIDATES)
+            if self.app_icon:
+                self.setWindowIcon(QtGui.QIcon(str(self.app_icon)))
             self.root = steam_root()
             self.config_path = localconfig_path(self.root)
             self.app_config = load_app_config()
@@ -875,9 +1033,9 @@ def qt_main():
             hero = QtWidgets.QFrame()
             hero.setObjectName("hero")
             hero_layout = QtWidgets.QHBoxLayout(hero)
-            if APP_ICON.exists():
+            if self.app_icon:
                 icon = QtWidgets.QLabel()
-                pix = QtGui.QPixmap(str(APP_ICON)).scaled(64, 64, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+                pix = QtGui.QPixmap(str(self.app_icon)).scaled(64, 64, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
                 icon.setPixmap(pix)
                 hero_layout.addWidget(icon)
             title_col = QtWidgets.QVBoxLayout()
@@ -916,6 +1074,8 @@ def qt_main():
             sys_layout = QtWidgets.QVBoxLayout(sys_box)
             sys_summary = QtWidgets.QLabel(
                 f"{self.system['gpu_name']}\n"
+                f"OS: {self.system['os'].get('name') or 'desconocido'}\n"
+                f"Dispositivo: {self.system['device'].get('product_name') or 'desconocido'}\n"
                 f"Sesion: {self.system['session'].get('type') or 'desconocida'} / {self.system['session'].get('desktop') or 'desktop desconocido'}\n"
                 f"Tools: gamescope={'si' if self.system['tools'].get('gamescope') else 'no'}, "
                 f"gamemoderun={'si' if self.system['tools'].get('gamemoderun') else 'no'}, "
@@ -1040,6 +1200,8 @@ def qt_main():
             if not item:
                 return
             self.current_game = item.data(QtCore.Qt.UserRole)
+            ensure_game_builtin_presets(self.app_config, self.current_game["appid"])
+            save_app_config(self.app_config)
             current = current_launch_options(self.config_text(), self.current_game["appid"])
             self.current_label.setText(
                 f"{self.current_game['name']} ({self.current_game['appid']})\n"
@@ -1177,9 +1339,10 @@ def qt_main():
                 "0.2.0 - HDR, GameMode, MangoHud y Gamescope.\n"
                 "0.3.0 - ProtonDB, personalizados y presets.\n"
                 "0.4.0 - Interfaz PySide6 mas clara.\n"
-                "0.5.0 - Logo, nombre, recomendaciones del sistema, hover help y README.\n\n"
+                "0.5.0 - Logo, nombre, recomendaciones del sistema, hover help y README.\n"
+                "0.6.0 - Bazzite/SteamOS handheld, Legion Go 2, 800p/1200p y limites FPS.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
-                f"README:\n{APP_DIR / 'README-Proton-Pilot.md'}"
+                f"README:\n{APP_DIR / 'README.md'}"
             )
 
         def show_recommendations(self):
