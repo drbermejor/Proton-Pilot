@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.7.3
+Version: 0.7.4
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -31,6 +31,7 @@ tocar `localconfig.vdf`.
 - Detects installed Steam games from local app manifests.
 - Lets you add a Steam game manually by name and AppID when local detection misses it.
 - Lets you add an external Windows executable as a local Proton Pilot profile and launch it with an installed Proton build.
+- Lets you choose and persist a custom Steam root path if automatic detection misses it.
 - Reads and writes Steam launch options in `localconfig.vdf`.
 - Creates a backup before writing changes.
 - Shows system-aware recommendations based on detected GPU, session type, and installed tools.
@@ -200,6 +201,10 @@ Backups are created next to that file before saving.
 Close Steam before saving launch options when possible. Steam can rewrite
 `localconfig.vdf` when it exits.
 
+When Steam is open, the GUI can close Steam, write or clear launch options, and
+then try to reopen Steam. If reopening fails, Proton Pilot shows a message asking
+you to open Steam manually.
+
 ## Recommendation Colors
 
 - Green: generally recommended default.
@@ -283,3 +288,5 @@ support or game-specific configuration.
 - 0.7.3: Added preset update flow, clearer preset feedback/confirmations, visible
   button frames, and experimental external executable profiles launched through
   detected or manually selected Proton builds.
+- 0.7.4: Added configurable Steam root path and safer Steam launch-option writes
+  that can close Steam, save/clear options, and reopen Steam automatically.

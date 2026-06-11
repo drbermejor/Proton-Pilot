@@ -15,7 +15,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.7.3"
+APP_VERSION = "0.7.4"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -70,10 +70,12 @@ HDR_ENGINE_LINES = {
 DEFAULT_APP_CONFIG = {
     "protondb_api": "https://protondb.max-p.me",
     "custom": {},
+    "external_games": [],
     "external_launch_options": {},
     "manual_games": [],
     "presets": {},
     "last_selected": [],
+    "steam_root": "",
 }
 
 OPTION_INFO = {
@@ -536,7 +538,15 @@ def vdf_value(text, key):
     return unescape_vdf(match.group(1)) if match else ""
 
 
-def steam_root():
+def valid_steam_root(path):
+    root = Path(path).expanduser() if path else None
+    return bool(root and root.exists() and (root / "steamapps").exists())
+
+
+def steam_root(config=None):
+    configured = (config or {}).get("steam_root", "")
+    if valid_steam_root(configured):
+        return Path(configured).expanduser().resolve()
     root = first_existing(STEAM_ROOTS)
     if not root:
         error("No encuentro la carpeta de Steam.")
@@ -879,6 +889,40 @@ def steam_is_running():
     return proc.returncode == 0
 
 
+def wait_for_steam_state(running, timeout=20):
+    end = _dt.datetime.now() + _dt.timedelta(seconds=timeout)
+    while _dt.datetime.now() < end:
+        if steam_is_running() == running:
+            return True
+        subprocess.run(["sleep", "0.5"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return steam_is_running() == running
+
+
+def close_steam(timeout=25):
+    if not steam_is_running():
+        return True
+    steam_cmd = shutil.which("steam")
+    if steam_cmd:
+        subprocess.Popen([steam_cmd, "-shutdown"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        subprocess.run(["pkill", "-TERM", "-u", str(HOME.name), "-x", "steam"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if wait_for_steam_state(False, timeout):
+        return True
+    subprocess.run(["pkill", "-TERM", "-u", str(HOME.name), "-x", "steam"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return wait_for_steam_state(False, 8)
+
+
+def open_steam(root=None):
+    candidates = [shutil.which("steam")]
+    if root:
+        candidates.extend([str(Path(root) / "steam.sh"), str(Path(root) / "ubuntu12_32/steam")])
+    for cmd in candidates:
+        if cmd and Path(cmd).exists():
+            subprocess.Popen([cmd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return wait_for_steam_state(True, 20)
+    return False
+
+
 def open_url(url):
     if shutil.which("xdg-open"):
         subprocess.Popen([shutil.which("xdg-open"), url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -1139,9 +1183,12 @@ def qt_main():
             self.app_icon = first_existing(APP_ICON_CANDIDATES)
             if self.app_icon:
                 self.setWindowIcon(QtGui.QIcon(str(self.app_icon)))
-            self.root = steam_root()
-            self.config_path = localconfig_path(self.root)
             self.app_config = load_app_config()
+            self.root = steam_root(self.app_config)
+            if not self.app_config.get("steam_root"):
+                self.app_config["steam_root"] = str(self.root)
+                save_app_config(self.app_config)
+            self.config_path = localconfig_path(self.root)
             self.system = detect_system()
             self.system_recommended = system_recommended_keys(self.system)
             self.games = merged_games(self.root, self.app_config)
@@ -1258,6 +1305,9 @@ def qt_main():
             title_col.addWidget(app_title)
             title_col.addWidget(app_version)
             hero_layout.addLayout(title_col, 1)
+            self.steam_path_btn = QtWidgets.QPushButton("Ruta Steam")
+            self.steam_path_btn.setToolTip("Seleccionar manualmente la carpeta raiz de Steam y guardarla para proximas ejecuciones.")
+            hero_layout.addWidget(self.steam_path_btn)
             layout.addWidget(hero)
 
             top = QtWidgets.QHBoxLayout()
@@ -1443,6 +1493,7 @@ def qt_main():
             buttons.addWidget(self.save_btn)
 
             self.game_list.currentItemChanged.connect(self.select_game)
+            self.steam_path_btn.clicked.connect(self.choose_steam_path)
             self.add_game_btn.clicked.connect(self.add_manual_game)
             self.recommend_btn.clicked.connect(self.show_recommendations)
             self.open_protondb_btn.clicked.connect(self.open_protondb)
@@ -1463,6 +1514,35 @@ def qt_main():
 
         def config_text(self):
             return self.config_path.read_text(errors="replace")
+
+        def choose_steam_path(self):
+            path = QtWidgets.QFileDialog.getExistingDirectory(
+                self,
+                "Selecciona la carpeta raiz de Steam",
+                str(self.root),
+            )
+            if not path:
+                return
+            if not valid_steam_root(path):
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Ruta no valida",
+                    "Esa carpeta no parece una raiz de Steam. Debe contener la carpeta steamapps.",
+                )
+                return
+            try:
+                self.root = Path(path).expanduser().resolve()
+                self.app_config["steam_root"] = str(self.root)
+                save_app_config(self.app_config)
+                self.config_path = localconfig_path(self.root)
+                self.populate_games()
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Ruta Steam guardada",
+                    f"Usando Steam desde:\n\n{self.root}\n\nSe recordara en la proxima ejecucion.",
+                )
+            except Exception as exc:
+                QtWidgets.QMessageBox.critical(self, "Error al cambiar Steam", str(exc))
 
         def is_external_game(self):
             return bool(self.current_game and self.current_game.get("external"))
@@ -1890,7 +1970,8 @@ def qt_main():
                 "0.7.0 - Resolucion real Gamescope, deteccion de monitor y presets nativos.\n"
                 "0.7.1 - Layout de escritorio mas ancho, lista fija y opciones sin corte horizontal.\n"
                 "0.7.2 - Opciones en lista vertical, iconos de juegos, juegos manuales y botones de accion claros.\n"
-                "0.7.3 - Actualizar presets, confirmaciones, botones con borde y ejecutables externos con Proton detectable o manual.\n\n"
+                "0.7.3 - Actualizar presets, confirmaciones, botones con borde y ejecutables externos con Proton detectable o manual.\n"
+                "0.7.4 - Ruta Steam configurable y guardado seguro cerrando/reabriendo Steam.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
@@ -1965,14 +2046,6 @@ def qt_main():
                 )
                 self.select_game(self.game_list.currentItem())
                 return
-            if steam_is_running():
-                reply = QtWidgets.QMessageBox.question(
-                    self,
-                    "Steam esta abierto",
-                    "Steam parece estar abierto. Si reescribe su configuracion al cerrar, podria perderse el cambio.\n\nContinuar igualmente?",
-                )
-                if reply != QtWidgets.QMessageBox.Yes:
-                    return
             command = self.command_edit.toPlainText().strip()
             reply = QtWidgets.QMessageBox.question(
                 self,
@@ -1981,15 +2054,38 @@ def qt_main():
             )
             if reply != QtWidgets.QMessageBox.Yes:
                 return
+            reopen_steam = False
+            if steam_is_running():
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Cerrar Steam para guardar",
+                    "Steam esta abierto. Para evitar que sobrescriba localconfig.vdf, Proton Pilot puede cerrarlo ahora, guardar las opciones y volver a abrirlo.\n\nCerrar Steam y continuar?",
+                )
+                if reply != QtWidgets.QMessageBox.Yes:
+                    return
+                if not close_steam():
+                    QtWidgets.QMessageBox.warning(
+                        self,
+                        "No se pudo cerrar Steam",
+                        "No he podido cerrar Steam de forma fiable. Cierra Steam manualmente y vuelve a guardar.",
+                    )
+                    return
+                reopen_steam = True
             backup = set_launch_options(self.config_path, self.current_game["appid"], command)
             self.save_custom()
             extra = ""
             if self.checks["UEHDR"].isChecked():
                 extra = "\n\n" + set_unreal_hdr(self.root, self.current_game["appid"])
+            reopen_note = ""
+            if reopen_steam:
+                if open_steam(self.root):
+                    reopen_note = "\n\nSteam se ha vuelto a abrir."
+                else:
+                    reopen_note = "\n\nNo he podido volver a abrir Steam. Abre Steam manualmente."
             QtWidgets.QMessageBox.information(
                 self,
                 "Guardado",
-                f"Opciones guardadas para {self.current_game['name']}.\n\nBackup:\n{backup}{extra}",
+                f"Opciones guardadas para {self.current_game['name']}.\n\nBackup:\n{backup}{extra}{reopen_note}",
             )
             self.select_game(self.game_list.currentItem())
 
@@ -2019,14 +2115,23 @@ def qt_main():
                 )
                 self.select_game(self.game_list.currentItem())
                 return
+            reopen_steam = False
             if steam_is_running():
                 reply = QtWidgets.QMessageBox.question(
                     self,
-                    "Steam esta abierto",
-                    "Steam parece estar abierto. Si reescribe su configuracion al cerrar, podria perderse el cambio.\n\nBorrar igualmente?",
+                    "Cerrar Steam para borrar",
+                    "Steam esta abierto. Para evitar que sobrescriba localconfig.vdf, Proton Pilot puede cerrarlo ahora, borrar las opciones y volver a abrirlo.\n\nCerrar Steam y continuar?",
                 )
                 if reply != QtWidgets.QMessageBox.Yes:
                     return
+                if not close_steam():
+                    QtWidgets.QMessageBox.warning(
+                        self,
+                        "No se pudo cerrar Steam",
+                        "No he podido cerrar Steam de forma fiable. Cierra Steam manualmente y vuelve a borrar.",
+                    )
+                    return
+                reopen_steam = True
             backup = set_launch_options(self.config_path, self.current_game["appid"], "")
             for cb in self.checks.values():
                 cb.setChecked(False)
@@ -2034,10 +2139,16 @@ def qt_main():
             self.custom_post.clear()
             self.set_resolution_fields(self.system.get("display", {}))
             self.command_edit.setPlainText("")
+            reopen_note = ""
+            if reopen_steam:
+                if open_steam(self.root):
+                    reopen_note = "\n\nSteam se ha vuelto a abrir."
+                else:
+                    reopen_note = "\n\nNo he podido volver a abrir Steam. Abre Steam manualmente."
             QtWidgets.QMessageBox.information(
                 self,
                 "Opciones borradas",
-                f"Opciones de lanzamiento borradas para {self.current_game['name']}.\n\nBackup:\n{backup}",
+                f"Opciones de lanzamiento borradas para {self.current_game['name']}.\n\nBackup:\n{backup}{reopen_note}",
             )
             self.select_game(self.game_list.currentItem())
 
@@ -2056,7 +2167,7 @@ def zenity_main():
         return 1
 
     app_config = load_app_config()
-    root = steam_root()
+    root = steam_root(app_config)
     cfg = localconfig_path(root)
     config_text = cfg.read_text(errors="replace")
     games = installed_games(root)
