@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.7.2
+Version: 0.7.3
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -30,6 +30,7 @@ tocar `localconfig.vdf`.
 
 - Detects installed Steam games from local app manifests.
 - Lets you add a Steam game manually by name and AppID when local detection misses it.
+- Lets you add an external Windows executable as a local Proton Pilot profile and launch it with an installed Proton build.
 - Reads and writes Steam launch options in `localconfig.vdf`.
 - Creates a backup before writing changes.
 - Shows system-aware recommendations based on detected GPU, session type, and installed tools.
@@ -214,6 +215,24 @@ Close Steam before saving launch options when possible. Steam can rewrite
 - `Borrar opciones` is highlighted in red and asks for confirmation before clearing
   the saved Steam launch options for the selected game.
 
+## External Executables
+
+The `Añadir juego` button supports two paths:
+
+- `Steam AppID`: adds a Steam game manually when local manifest detection misses it.
+- `Ejecutable Proton`: selects a Windows `.exe`/`.msi`, chooses an installed Proton
+  build or a custom Proton path, and stores a local Proton Pilot profile.
+
+External executable profiles do not write to Steam's `localconfig.vdf`. They are
+stored in Proton Pilot's config and launched with:
+
+```bash
+STEAM_COMPAT_DATA_PATH=~/.config/proton-pilot/compatdata/<profile> proton run <exe>
+```
+
+This is intentionally separate from Steam non-Steam shortcuts, because Steam stores
+those in a different shortcut database.
+
 ## Forcing Real Gamescope Resolution
 
 On KDE Wayland with fractional scaling, a 2560x1440 monitor at 125% scale may
@@ -261,3 +280,6 @@ support or game-specific configuration.
   no horizontal scroll on the options panel, and two-column option grid.
 - 0.7.2: Switched launch options to a vertical list, added Steam cached game
   icons, manual game entries, clearer save/delete buttons, and delete confirmation.
+- 0.7.3: Added preset update flow, clearer preset feedback/confirmations, visible
+  button frames, and experimental external executable profiles launched through
+  detected or manually selected Proton builds.
