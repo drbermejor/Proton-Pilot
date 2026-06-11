@@ -1,10 +1,30 @@
 # Proton Pilot
 
-Version: 0.6.0
+<p align="center">
+  <img src="assets/proton-pilot.png" alt="Proton Pilot logo" width="160">
+</p>
+
+<p align="center">
+  <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
+</p>
+
+Version: 0.6.1
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
 GameMode, MangoHud, HDR, VKD3D-Proton, and experimental options such as FSR4 upgrade.
+
+## Descripcion En Castellano
+
+**Proton Pilot** es una aplicacion grafica para gestionar opciones de lanzamiento
+de Steam por juego en Linux. Detecta tus juegos instalados, tu GPU, tu sesion
+grafica y herramientas como Gamescope, GameMode y MangoHud, y te propone perfiles
+practicos para rendimiento, HDR, Ray Tracing, FSR4, Wayland y handhelds como
+Lenovo Legion Go 2 con Bazzite o SteamOS.
+
+La app no instala Steam ni modifica configuraciones globales del sistema. Solo
+edita las opciones de lanzamiento por juego y crea copias de seguridad antes de
+tocar `localconfig.vdf`.
 
 ## What It Does
 
@@ -25,6 +45,21 @@ Clone the repository and run:
 
 ```bash
 ./install.sh
+```
+
+The installer can install missing dependencies on supported distributions. It
+will ask before using `sudo` or `rpm-ostree`.
+
+Automatic dependency install:
+
+```bash
+./install.sh --deps
+```
+
+Skip dependency installation:
+
+```bash
+./install.sh --no-deps
 ```
 
 The installer copies the app to:
@@ -58,6 +93,14 @@ Optional tools detected and used by presets:
 - `gamemoderun`
 - `mangohud`
 - `xdg-open`
+
+The installer supports dependency installation through:
+
+- `pacman` for Arch/CachyOS
+- `dnf` for Fedora
+- `rpm-ostree` for Bazzite/Fedora Atomic
+- `apt` for Debian/Ubuntu-based systems
+- `zypper` for openSUSE
 
 On Arch/CachyOS:
 
@@ -183,3 +226,5 @@ support or game-specific configuration.
   hover descriptions, FSR4/Wayland options, README, and versioning.
 - 0.6.0: Added Bazzite/SteamOS/handheld detection, Legion Go 2 presets, 800p/1200p
   Gamescope profiles, frame-limit presets, and handheld documentation.
+- 0.6.1: Added dependency installation to `install.sh`, README logo, and Spanish
+  project description.
