@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.8.1
+Version: 0.8.2
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -36,6 +36,7 @@ tocar `localconfig.vdf`.
 - Reads and writes Steam launch options in `localconfig.vdf`.
 - Creates a backup before writing changes.
 - Shows system-aware recommendations based on detected GPU, session type, and installed tools.
+- Shows clear system status cards for display resolution, HDR, VRR, GPU, and tools.
 - Detects Bazzite, SteamOS-style sessions, Lenovo Legion Go devices, and handheld-friendly setups.
 - Detects the primary monitor resolution and can force Gamescope to expose the real physical resolution to the game.
 - Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
@@ -289,6 +290,9 @@ and can be loaded for any game.
 Yellow launch options are recommended or important for the detected system.
 `Marcar recomendadas` enables those detected recommendations in the UI, but it
 does not write anything to Steam until `Guardar opciones` is pressed.
+Red launch options are useful but experimental or game-sensitive; Proton Pilot
+may still recommend them when the system supports them, but they should be
+validated per game.
 
 `Gamescope fullscreen` starts the game inside Gamescope. `Resolucion real
 Gamescope` is the mode-setting layer on top of that: it supplies the monitor's
@@ -349,3 +353,6 @@ support or game-specific configuration.
 - 0.8.1: Improved system recommendations for Gamescope/HDR, added colored
   ProtonDB ratings in the game list, clarified Gamescope option descriptions,
   and added optional Steam non-Steam shortcut creation for external profiles.
+- 0.8.2: Added clearer colored system status cards, explicit HDR/VRR detection,
+  ProtonDB rating badges, MangoHud toggle help, and cautious VRR/Adaptive Sync
+  recommendations.

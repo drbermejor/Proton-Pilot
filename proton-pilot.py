@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.1"
+APP_VERSION = "0.8.2"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -93,7 +93,7 @@ OPTION_INFO = {
     },
     "MANGOHUD": {
         "label": "MangoHud",
-        "description": "Muestra overlay de FPS, frametime, GPU/CPU y temperaturas. Con Gamescope se aplica como --mangoapp.",
+        "description": "Muestra overlay de FPS, frametime, GPU/CPU y temperaturas. Con Gamescope se aplica como --mangoapp. Atajo ingame: Shift derecho + F12 muestra u oculta el overlay.",
         "tokens": "mangohud o gamescope --mangoapp",
         "recommended": True,
     },
@@ -172,6 +172,7 @@ OPTION_INFO = {
         "description": "Limita FPS unos pocos frames por debajo de los Hz aplicados para evitar tocar el techo VRR. Usa MangoHud porque Gamescope redondea su limitador a divisores del refresco.",
         "tokens": "MANGOHUD_CONFIG=fps_limit=<Hz-3> mangohud",
         "recommended": False,
+        "caution": True,
     },
     "GSFSR": {
         "label": "Escalado Gamescope FSR",
@@ -190,6 +191,7 @@ OPTION_INFO = {
         "description": "Pide VRR/Adaptive Sync a Gamescope si tu pantalla y sesion lo soportan.",
         "tokens": "gamescope --adaptive-sync",
         "recommended": False,
+        "caution": True,
     },
     "RT": {
         "label": "Ray Tracing DXR",
@@ -403,6 +405,10 @@ def command_output(args):
         return ""
 
 
+def strip_ansi(text):
+    return re.sub(r"\x1b\[[0-9;]*m", "", text or "")
+
+
 def detect_system():
     lspci = command_output(["lspci", "-nnk"])
     os_release = read_os_release()
@@ -461,6 +467,27 @@ def detect_system():
 
 
 def detect_primary_display():
+    kscreen = strip_ansi(command_output(["kscreen-doctor", "-o"]))
+    mode = re.search(r"Modes:.*?(\d+):(\d+)x(\d+)@([0-9.]+)\*", kscreen, re.S)
+    name = re.search(r"Output:\s*\d+\s+(\S+)", kscreen)
+    hdr = re.search(r"^\s*HDR:\s*([^\n]+)", kscreen, re.M)
+    vrr = re.search(r"^\s*Vrr:\s*([^\n]+)", kscreen, re.M)
+    wcg = re.search(r"^\s*Wide Color Gamut:\s*([^\n]+)", kscreen, re.M)
+    scale = re.search(r"^\s*Scale:\s*([^\n]+)", kscreen, re.M)
+    geometry = re.search(r"^\s*Geometry:\s*([^\n]+)", kscreen, re.M)
+    if mode:
+        return {
+            "name": name.group(1) if name else "",
+            "width": int(mode.group(2)),
+            "height": int(mode.group(3)),
+            "refresh": round(float(mode.group(4))),
+            "hdr": (hdr.group(1).strip().lower() if hdr else ""),
+            "vrr": (vrr.group(1).strip().lower() if vrr else ""),
+            "wide_color": (wcg.group(1).strip().lower() if wcg else ""),
+            "scale": scale.group(1).strip() if scale else "",
+            "geometry": geometry.group(1).strip() if geometry else "",
+        }
+
     xrandr = command_output(["xrandr", "--current"])
     match = re.search(r"^(\S+)\s+connected\s+primary\s+(\d+)x(\d+)\+\d+\+\d+", xrandr, re.M)
     if not match:
@@ -472,19 +499,18 @@ def detect_primary_display():
         mode_line = re.search(rf"^\s*{width}x{height}\s+([0-9.]+)\*", xrandr, re.M)
         if mode_line:
             refresh = round(float(mode_line.group(1)))
-        return {"name": match.group(1), "width": width, "height": height, "refresh": refresh}
-
-    kscreen = command_output(["kscreen-doctor", "-o"])
-    mode = re.search(r"Modes:.*?(\d+):\x1b\[[^m]*m?(\d+)x(\d+)@([0-9.]+)\*", kscreen, re.S)
-    name = re.search(r"Output:\s*\d+\s+(\S+)", re.sub(r"\x1b\[[0-9;]*m", "", kscreen))
-    if mode:
         return {
-            "name": name.group(1) if name else "",
-            "width": int(mode.group(2)),
-            "height": int(mode.group(3)),
-            "refresh": round(float(mode.group(4))),
+            "name": match.group(1),
+            "width": width,
+            "height": height,
+            "refresh": refresh,
+            "hdr": "",
+            "vrr": "",
+            "wide_color": "",
+            "scale": "",
+            "geometry": "",
         }
-    return {"name": "", "width": 0, "height": 0, "refresh": None}
+    return {"name": "", "width": 0, "height": 0, "refresh": None, "hdr": "", "vrr": "", "wide_color": "", "scale": "", "geometry": ""}
 
 
 def display_resolution_or_empty(display):
@@ -493,6 +519,15 @@ def display_resolution_or_empty(display):
         "height": int(display.get("height") or 0),
         "refresh": int(display.get("refresh") or 0) or "",
     }
+
+
+def display_hdr_enabled(display):
+    return str((display or {}).get("hdr", "")).lower() in {"enabled", "on", "active", "true", "yes"}
+
+
+def display_vrr_available(display):
+    value = str((display or {}).get("vrr", "")).lower()
+    return value not in {"", "disabled", "off", "unsupported", "never", "false", "no"}
 
 
 def os_environ(key):
@@ -536,6 +571,10 @@ def system_recommended_keys(system):
     if system["tools"].get("gamescope") and system.get("gamescope_wsi"):
         keys.add("HDR")
         keys.add("PROTONHDR")
+    if system["tools"].get("gamescope") and display_vrr_available(system.get("display", {})):
+        keys.add("ADAPTIVE")
+        if system["tools"].get("mangohud") and int(system.get("display", {}).get("refresh") or 0):
+            keys.add("CAPVRR")
     if system["session"].get("type") == "wayland":
         keys.add("WAYLAND")
     if system.get("device", {}).get("is_handheld"):
@@ -558,6 +597,15 @@ def recommendation_reasons(system):
         reasons.append("Sesion Wayland detectada: Proton Wayland puede merecer prueba por juego.")
     if system["tools"].get("gamescope") and system["gamescope_wsi"]:
         reasons.append("Gamescope + WSI detectados: se recomiendan Gamescope, resolucion real y HDR via Gamescope para juegos compatibles.")
+    display = system.get("display", {})
+    if display_hdr_enabled(display):
+        reasons.append("HDR del sistema activo: KDE informa HDR enabled en el monitor seleccionado.")
+    elif display.get("hdr"):
+        reasons.append(f"HDR del sistema detectado como {display.get('hdr')}: activa HDR en KDE antes de usar presets HDR.")
+    if display_vrr_available(display):
+        reasons.append(f"VRR disponible: KDE informa Vrr {display.get('vrr')}; Adaptive Sync y VRR cap merecen prueba por juego.")
+    elif display.get("vrr"):
+        reasons.append(f"VRR detectado como {display.get('vrr')}: Adaptive Sync puede no tener efecto.")
     if system.get("device", {}).get("is_bazzite"):
         reasons.append("Bazzite detectado: presets handheld y Gamescope encajan bien con Gaming Mode.")
     if system.get("device", {}).get("is_steamos"):
@@ -1175,9 +1223,9 @@ def protondb_tier_label(summary):
 
 def protondb_tier_color(tier):
     colors = {
-        "platinum": ("#d7f3ff", "#0f5f78"),
-        "gold": ("#ffe082", "#5f4300"),
-        "silver": ("#e0e0e0", "#343a40"),
+        "platinum": ("#e5e4e2", "#263238"),
+        "gold": ("#ffd54f", "#4e3500"),
+        "silver": ("#cfd8dc", "#263238"),
         "bronze": ("#d6a46f", "#4a2a0a"),
         "borked": ("#ffcdd2", "#7f130f"),
         "pending": ("#eeeeee", "#5f6368"),
@@ -1510,6 +1558,49 @@ def qt_main():
                 QLabel#appTitle { font-size: 22px; font-weight: 900; color: #17202a; }
                 QLabel#version { color: #607d8b; font-weight: 700; }
                 QLabel#sectionHint { color: #607d8b; }
+                QFrame#infoBox {
+                    background: #f8fafc;
+                    border: 1px solid #cfd8dc;
+                    border-radius: 8px;
+                    padding: 8px;
+                }
+                QFrame#systemCard {
+                    border-radius: 8px;
+                    padding: 8px;
+                    min-height: 42px;
+                }
+                QLabel#statusGood {
+                    background: #e8f5e9;
+                    color: #1b5e20;
+                    border: 1px solid #81c784;
+                    border-radius: 8px;
+                    padding: 8px;
+                    font-weight: 800;
+                }
+                QLabel#statusWarn {
+                    background: #fff8e1;
+                    color: #5f4300;
+                    border: 1px solid #ffca28;
+                    border-radius: 8px;
+                    padding: 8px;
+                    font-weight: 800;
+                }
+                QLabel#statusBad {
+                    background: #ffebee;
+                    color: #8a1c1c;
+                    border: 1px solid #ef9a9a;
+                    border-radius: 8px;
+                    padding: 8px;
+                    font-weight: 800;
+                }
+                QLabel#statusNeutral {
+                    background: #eef3f7;
+                    color: #29434e;
+                    border: 1px solid #b0bec5;
+                    border-radius: 8px;
+                    padding: 8px;
+                    font-weight: 800;
+                }
                 QFrame#hero {
                     background: #eef7f2;
                     border: 1px solid #b7dfc5;
@@ -1543,6 +1634,13 @@ def qt_main():
                 QCheckBox[important="true"] {
                     background: #fff8e1;
                     border: 1px solid #ffca28;
+                    border-radius: 6px;
+                    padding: 4px;
+                    font-weight: 800;
+                }
+                QCheckBox[caution="true"] {
+                    background: #ffebee;
+                    border: 1px solid #ef5350;
                     border-radius: 6px;
                     padding: 4px;
                     font-weight: 800;
@@ -1597,6 +1695,11 @@ def qt_main():
                     border: 1px solid #d6d9dd;
                     border-radius: 6px;
                     padding: 8px;
+                }
+                QLabel#protondbBadge {
+                    border-radius: 8px;
+                    padding: 8px;
+                    font-weight: 900;
                 }
                 """
             )
@@ -1657,11 +1760,13 @@ def qt_main():
             self.game_list.setTextElideMode(QtCore.Qt.ElideNone)
             self.game_list.setIconSize(QtCore.QSize(28, 28))
             for game in self.games:
-                item = QtWidgets.QListWidgetItem(f"{game['name']}  ({game['appid']})")
+                summary = self.cached_game_summary(game["appid"])
+                item = QtWidgets.QListWidgetItem(self.game_label(game, summary))
                 item.setData(QtCore.Qt.UserRole, game)
                 icon_path = find_game_icon(self.root, game["appid"])
                 if icon_path:
                     item.setIcon(QtGui.QIcon(str(icon_path)))
+                self.style_game_item(item, summary)
                 self.game_list.addItem(item)
             left.addWidget(self.game_list, 1)
             self.add_game_btn = QtWidgets.QPushButton("Añadir juego")
@@ -1671,20 +1776,45 @@ def qt_main():
             self.current_label.setObjectName("hint")
             self.current_label.setWordWrap(True)
             right.addWidget(self.current_label)
+            self.protondb_badge = QtWidgets.QLabel("ProtonDB: sin datos")
+            self.protondb_badge.setObjectName("protondbBadge")
+            self.protondb_badge.setWordWrap(True)
+            self.protondb_badge.setVisible(False)
+            right.addWidget(self.protondb_badge)
 
             sys_box = QtWidgets.QGroupBox("Recomendaciones segun tu sistema")
             sys_layout = QtWidgets.QVBoxLayout(sys_box)
-            sys_summary = QtWidgets.QLabel(
-                f"{self.system['os'].get('name') or 'OS desconocido'} - "
-                f"{self.system['session'].get('type') or 'sesion desconocida'} / {self.system['session'].get('desktop') or 'desktop desconocido'}\n"
-                f"{self.system['device'].get('product_name') or 'dispositivo desconocido'} - {self.system['gpu_name']}\n"
-                f"Tools: gamescope={'si' if self.system['tools'].get('gamescope') else 'no'}, "
-                f"gamemoderun={'si' if self.system['tools'].get('gamemoderun') else 'no'}, "
-                f"mangohud={'si' if self.system['tools'].get('mangohud') else 'no'}"
+            cards = QtWidgets.QGridLayout()
+            cards.setHorizontalSpacing(6)
+            cards.setVerticalSpacing(6)
+            display = self.system.get("display", {})
+
+            def status_card(title, value, state="neutral"):
+                label = QtWidgets.QLabel(f"{title}\n{value}")
+                label.setObjectName({"good": "statusGood", "warn": "statusWarn", "bad": "statusBad"}.get(state, "statusNeutral"))
+                label.setWordWrap(True)
+                return label
+
+            hdr_value = "ACTIVO" if display_hdr_enabled(display) else (display.get("hdr") or "no detectado")
+            hdr_state = "good" if display_hdr_enabled(display) else ("warn" if display.get("hdr") else "bad")
+            vrr_value = (display.get("vrr") or "no detectado").upper()
+            vrr_state = "good" if display_vrr_available(display) else ("warn" if display.get("vrr") else "bad")
+            display_value = (
+                f"{display.get('name') or 'monitor'} {display.get('width') or '?'}x{display.get('height') or '?'}"
+                f"@{display.get('refresh') or '?'}"
             )
-            sys_summary.setObjectName("sectionHint")
-            sys_summary.setWordWrap(True)
-            sys_layout.addWidget(sys_summary)
+            tools_value = (
+                f"Gamescope {'si' if self.system['tools'].get('gamescope') else 'no'} · "
+                f"GameMode {'si' if self.system['tools'].get('gamemoderun') else 'no'} · "
+                f"MangoHud {'si' if self.system['tools'].get('mangohud') else 'no'}"
+            )
+            cards.addWidget(status_card("Sistema", f"{self.system['os'].get('name') or 'OS'} · {self.system['session'].get('type') or 'sesion'}"), 0, 0)
+            cards.addWidget(status_card("Pantalla", display_value, "good" if display.get("width") else "warn"), 0, 1)
+            cards.addWidget(status_card("HDR sistema", hdr_value, hdr_state), 0, 2)
+            cards.addWidget(status_card("VRR", vrr_value, vrr_state), 1, 0)
+            cards.addWidget(status_card("GPU", self.system["gpu_name"], "neutral"), 1, 1)
+            cards.addWidget(status_card("Herramientas", tools_value, "good"), 1, 2)
+            sys_layout.addLayout(cards)
             sys_reasons = QtWidgets.QLabel("\n".join(f"- {r}" for r in recommendation_reasons(self.system)) or "No hay recomendaciones automaticas.")
             sys_reasons.setWordWrap(True)
             sys_layout.addWidget(sys_reasons)
@@ -1732,12 +1862,17 @@ def qt_main():
                 desc = meta["description"]
                 recommended = meta["recommended"]
                 important = meta.get("important", False)
+                caution = meta.get("caution", False)
                 system_recommended = key in self.system_recommended
                 suffix = ""
-                if system_recommended:
+                if system_recommended and caution:
+                    suffix = "  - sistema / probar"
+                elif system_recommended:
                     suffix = "  - sistema"
                 elif recommended:
                     suffix = "  - recomendado"
+                elif caution:
+                    suffix = "  - probar"
                 elif important:
                     suffix = "  - importante"
                 text = label + suffix
@@ -1747,6 +1882,7 @@ def qt_main():
                 cb.setProperty("recommended", "true" if recommended else "false")
                 cb.setProperty("systemRecommended", "true" if system_recommended else "false")
                 cb.setProperty("important", "true" if important else "false")
+                cb.setProperty("caution", "true" if caution else "false")
                 cb.setProperty("optionKey", key)
                 cb.installEventFilter(self)
                 cb.stateChanged.connect(self.update_command)
@@ -1924,6 +2060,27 @@ def qt_main():
             item.setText(self.game_label(game, summary))
             self.style_game_item(item, summary)
 
+        def update_protondb_badge(self, summary):
+            rating = protondb_tier_label(summary)
+            if not rating:
+                self.protondb_badge.setVisible(False)
+                return
+            tier = protondb_tier(summary)
+            bg, fg = protondb_tier_color(tier)
+            total = summary.get("total")
+            confidence = summary.get("confidence")
+            best = summary.get("bestReportedTier")
+            details = []
+            if total is not None:
+                details.append(f"{total} reportes")
+            if confidence:
+                details.append(f"confianza {confidence}")
+            if best and str(best).lower() != tier:
+                details.append(f"mejor {str(best).upper()}")
+            self.protondb_badge.setText("ProtonDB  " + rating + (f"  ·  {' · '.join(details)}" if details else ""))
+            self.protondb_badge.setStyleSheet(f"background: {bg}; color: {fg}; border: 1px solid {fg};")
+            self.protondb_badge.setVisible(True)
+
         def populate_games(self, preferred_appid=None):
             self.games = merged_games(self.root, self.app_config)
             self.game_list.blockSignals(True)
@@ -1959,12 +2116,13 @@ def qt_main():
                 summary = protondb_cached_summary(self.app_config, self.current_game["appid"])
                 save_app_config(self.app_config)
                 self.update_current_item_rating(summary)
+                self.update_protondb_badge(summary)
+            else:
+                self.update_protondb_badge({})
             rating = protondb_tier_label(summary)
-            rating_line = f"\nProtonDB: {rating}" if rating else ""
             self.current_label.setText(
                 f"{self.current_game['name']} ({self.current_game['appid']}) - {source}\n"
                 f"Actual: {current or '(sin opciones)'}"
-                f"{rating_line}"
             )
             self.set_action_availability()
             flags = detect_flags(current)
@@ -2175,6 +2333,8 @@ def qt_main():
                 recommended = "Recomendada para tu sistema; el boton Marcar recomendadas la activara."
             elif meta["recommended"]:
                 recommended = "Recomendada por defecto"
+            elif meta.get("caution"):
+                recommended = "Puede beneficiar, pero conviene probarla por juego. Por eso aparece en rojo."
             elif meta.get("important"):
                 recommended = "Opcion importante: depende del juego, monitor y objetivo."
             else:
@@ -2184,6 +2344,8 @@ def qt_main():
                 extra = "\nDiferencia clave: Gamescope fullscreen crea el contenedor. Resolucion real Gamescope decide que resolucion/Hz se exponen dentro de ese contenedor."
             elif key == "REALRES":
                 extra = "\nDiferencia clave: no sustituye a Gamescope fullscreen; le anade el modo nativo del monitor (-W/-H/-w/-h/-r)."
+            elif key == "MANGOHUD":
+                extra = "\nAtajo ingame: Shift derecho + F12 muestra u oculta el overlay. Shift izquierdo + F1 alterna el limite FPS de MangoHud."
             self.option_detail.setText(
                 f"{meta['label']}\n\n"
                 f"{meta['description']}\n\n"
@@ -2472,7 +2634,8 @@ def qt_main():
                 "0.7.8 - VRR cap automatico usando Hz aplicados.\n"
                 "0.7.9 - VRR cap usa limitador MangoHud porque Gamescope redondea a divisores.\n"
                 "0.8.0 - Presets compartidos, controles sin rueda accidental, lanzamiento Steam y resumen ProtonDB oficial.\n"
-                "0.8.1 - Recomendadas amarillas, ratings ProtonDB en juegos y accesos directos Steam externos.\n\n"
+                "0.8.1 - Recomendadas amarillas, ratings ProtonDB en juegos y accesos directos Steam externos.\n"
+                "0.8.2 - Tarjetas HDR/VRR, badge ProtonDB y recomendaciones VRR/Adaptive en rojo de prueba.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )

@@ -119,7 +119,27 @@ class ProtonPilotLogicTests(unittest.TestCase):
         summary = {"tier": "gold", "total": 182}
 
         self.assertEqual(proton_pilot.protondb_tier_label(summary), "GOLD")
-        self.assertEqual(proton_pilot.protondb_tier_color("gold"), ("#ffe082", "#5f4300"))
+        self.assertEqual(proton_pilot.protondb_tier_color("gold"), ("#ffd54f", "#4e3500"))
+        self.assertEqual(proton_pilot.protondb_tier_color("platinum"), ("#e5e4e2", "#263238"))
+
+    def test_system_recommends_vrr_and_hdr_when_available(self):
+        system = {
+            "tools": {"gamemoderun": True, "mangohud": True, "gamescope": True},
+            "gamescope_wsi": True,
+            "session": {"type": "wayland"},
+            "display": {"width": 2560, "height": 1440, "refresh": 180, "hdr": "enabled", "vrr": "automatic"},
+            "device": {"is_handheld": False},
+            "gpu": "amd",
+        }
+
+        keys = proton_pilot.system_recommended_keys(system)
+
+        self.assertIn("HDR", keys)
+        self.assertIn("PROTONHDR", keys)
+        self.assertIn("ADAPTIVE", keys)
+        self.assertIn("CAPVRR", keys)
+        self.assertTrue(proton_pilot.display_hdr_enabled(system["display"]))
+        self.assertTrue(proton_pilot.display_vrr_available(system["display"]))
 
 
 if __name__ == "__main__":
