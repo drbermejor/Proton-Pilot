@@ -15,7 +15,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.7.9"
+APP_VERSION = "0.8.0"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -77,6 +77,7 @@ DEFAULT_APP_CONFIG = {
     "external_launch_options": {},
     "manual_games": [],
     "presets": {},
+    "shared_presets": {},
     "last_selected": [],
     "steam_root": "",
 }
@@ -129,12 +130,14 @@ OPTION_INFO = {
         "description": "Ejecuta el juego dentro de Gamescope a pantalla completa. Necesario para HDR y util para aislar resolucion/modo de pantalla.",
         "tokens": "gamescope -f --",
         "recommended": False,
+        "important": True,
     },
     "REALRES": {
         "label": "Resolucion real Gamescope",
         "description": "Fuerza a Gamescope a exponer la resolucion fisica del monitor al juego con -W/-H y -w/-h. Util con escalado fraccional de KDE/Wayland.",
         "tokens": "gamescope -W <monitor_w> -H <monitor_h> -w <game_w> -h <game_h> -r <hz>",
         "recommended": False,
+        "important": True,
     },
     "HANDHELD800P": {
         "label": "Handheld 800p",
@@ -275,6 +278,7 @@ def save_app_config(config):
 
 
 def ensure_builtin_presets(config):
+    config.setdefault("shared_presets", {})
     presets = config.setdefault("presets", {})
     dune = presets.setdefault("1172710", {})
     builtins = {
@@ -343,6 +347,21 @@ def ensure_game_builtin_presets(config, appid):
     }
     for name, payload in builtins.items():
         game_presets.setdefault(name, payload)
+
+
+def get_shared_presets(config):
+    return config.setdefault("shared_presets", {})
+
+
+def preset_ref(scope, name):
+    return f"{scope}:{name}"
+
+
+def split_preset_ref(ref):
+    if not ref:
+        return "", ""
+    scope, _, name = str(ref).partition(":")
+    return (scope or "game"), name
 
 
 def ensure_display_preset(config, appid, display):
@@ -462,6 +481,14 @@ def detect_primary_display():
             "refresh": round(float(mode.group(4))),
         }
     return {"name": "", "width": 0, "height": 0, "refresh": None}
+
+
+def display_resolution_or_empty(display):
+    return {
+        "width": int(display.get("width") or 0),
+        "height": int(display.get("height") or 0),
+        "refresh": int(display.get("refresh") or 0) or "",
+    }
 
 
 def os_environ(key):
@@ -993,6 +1020,50 @@ def protondb_reports(appid, config):
         return []
 
 
+def protondb_summary(appid):
+    url = f"https://www.protondb.com/api/v1/reports/summaries/{appid}.json"
+    req = urllib.request.Request(url, headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=8) as response:
+            if response.status != 200:
+                return {}
+            data = json.loads(response.read().decode("utf-8", "replace"))
+            return data if isinstance(data, dict) else {}
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return {}
+
+
+def protondb_summary_lines(summary):
+    if not summary:
+        return []
+    lines = []
+    total = summary.get("total")
+    tier = summary.get("tier")
+    best = summary.get("bestReportedTier")
+    trending = summary.get("trendingTier")
+    confidence = summary.get("confidence")
+    score = summary.get("score")
+    if tier or best or trending:
+        parts = []
+        if tier:
+            parts.append(f"rating actual: {tier}")
+        if best:
+            parts.append(f"mejor reportado: {best}")
+        if trending:
+            parts.append(f"tendencia: {trending}")
+        lines.append("Resumen oficial ProtonDB: " + ", ".join(parts))
+    if total is not None or confidence or score is not None:
+        parts = []
+        if total is not None:
+            parts.append(f"{total} reportes")
+        if confidence:
+            parts.append(f"confianza {confidence}")
+        if score is not None:
+            parts.append(f"score {score}")
+        lines.append("Datos: " + ", ".join(parts))
+    return lines
+
+
 def extract_launch_hints(text):
     hints = []
     if not text:
@@ -1012,11 +1083,22 @@ def extract_launch_hints(text):
 
 def protondb_recommendations(game, config):
     reports = protondb_reports(game["appid"], config)
+    summary = protondb_summary(game["appid"])
     if not reports:
-        return (
-            f"No he encontrado reportes via API comunitaria para {game['name']}.\n\n"
-            f"Puedes revisar la pagina manualmente:\nhttps://www.protondb.com/app/{game['appid']}"
-        )
+        lines = [f"ProtonDB: {game['name']} ({game['appid']})", ""]
+        lines.extend(protondb_summary_lines(summary))
+        if summary:
+            lines.extend(
+                [
+                    "",
+                    "No he podido extraer launch options concretas desde la API comunitaria antigua.",
+                    "Abre ProtonDB para leer los reportes detallados y copia aqui cualquier launch option que recomienden.",
+                ]
+            )
+        else:
+            lines.append("No he encontrado datos automaticos para este juego.")
+        lines.extend(["", f"Pagina: https://www.protondb.com/app/{game['appid']}"])
+        return "\n".join(lines)
 
     ratings = {}
     proton_versions = {}
@@ -1056,12 +1138,24 @@ def protondb_recommendations(game, config):
 
 def protondb_recommendation_data(game, config):
     reports = protondb_reports(game["appid"], config)
-    data = {"text": "", "launch_hints": [], "reports": len(reports)}
+    summary = protondb_summary(game["appid"])
+    data = {"text": "", "launch_hints": [], "reports": len(reports), "summary": summary}
     if not reports:
-        data["text"] = (
-            f"No he encontrado reportes via API comunitaria para {game['name']}.\n\n"
-            f"Puedes revisar la pagina manualmente:\nhttps://www.protondb.com/app/{game['appid']}"
-        )
+        lines = [f"ProtonDB: {game['name']} ({game['appid']})", ""]
+        lines.extend(protondb_summary_lines(summary))
+        if summary:
+            lines.extend(
+                [
+                    "",
+                    "He encontrado el resumen oficial, pero no launch options extraibles automaticamente.",
+                    "La web de ProtonDB carga los reportes detallados por JavaScript; abre la pagina para leerlos.",
+                    "Si ves una launch option util, pegala en Ajustes personalizados o en Comando final.",
+                ]
+            )
+        else:
+            lines.append("No he encontrado datos automaticos. Revisa la pagina manualmente.")
+        lines.extend(["", f"Pagina: https://www.protondb.com/app/{game['appid']}"])
+        data["text"] = "\n".join(lines)
         return data
 
     ratings = {}
@@ -1081,7 +1175,10 @@ def protondb_recommendation_data(game, config):
         if notes and len(notes_bits) < 4:
             notes_bits.append(" ".join(notes.split())[:420])
 
-    lines = [f"ProtonDB comunitario: {game['name']} ({game['appid']})", ""]
+    lines = [f"ProtonDB: {game['name']} ({game['appid']})", ""]
+    lines.extend(protondb_summary_lines(summary))
+    if summary:
+        lines.append("")
     if ratings:
         lines.append("Ratings recientes: " + ", ".join(f"{k}: {v}" for k, v in sorted(ratings.items(), key=lambda kv: -kv[1])))
     if proton_versions:
@@ -1225,6 +1322,14 @@ def qt_main():
     except Exception:
         return None
 
+    class NoWheelComboBox(QtWidgets.QComboBox):
+        def wheelEvent(self, event):
+            event.ignore()
+
+    class NoWheelSpinBox(QtWidgets.QSpinBox):
+        def wheelEvent(self, event):
+            event.ignore()
+
     class App(QtWidgets.QWidget):
         def __init__(self):
             super().__init__()
@@ -1245,7 +1350,7 @@ def qt_main():
             self.games = merged_games(self.root, self.app_config)
             self.checks = {}
             self.current_game = None
-            self.active_gamescope_res = {"width": 0, "height": 0, "refresh": ""}
+            self.active_gamescope_res = display_resolution_or_empty(self.system.get("display", {}))
 
             self.setStyleSheet(
                 """
@@ -1282,6 +1387,13 @@ def qt_main():
                     border-radius: 6px;
                     padding: 4px;
                     font-weight: 700;
+                }
+                QCheckBox[important="true"] {
+                    background: #e0f7fa;
+                    border: 1px solid #00acc1;
+                    border-radius: 6px;
+                    padding: 4px;
+                    font-weight: 800;
                 }
                 QCheckBox#launchOption {
                     border-radius: 6px;
@@ -1444,11 +1556,14 @@ def qt_main():
 
             preset_box = QtWidgets.QGroupBox("Presets del juego")
             preset_layout = QtWidgets.QHBoxLayout(preset_box)
-            self.preset_combo = QtWidgets.QComboBox()
-            self.apply_preset_btn = QtWidgets.QPushButton("Aplicar preset")
-            self.save_preset_btn = QtWidgets.QPushButton("Guardar")
-            self.update_preset_btn = QtWidgets.QPushButton("Actualizar")
-            self.delete_preset_btn = QtWidgets.QPushButton("Borrar")
+            self.preset_combo = NoWheelComboBox()
+            self.preset_combo.setToolTip("La rueda del raton no cambia este selector para evitar cambios accidentales al desplazarte.")
+            self.apply_preset_btn = QtWidgets.QPushButton("Cargar preset en pantalla")
+            self.apply_preset_btn.setToolTip("Carga el preset en los controles. No escribe en Steam hasta que pulses Guardar opciones.")
+            self.save_preset_btn = QtWidgets.QPushButton("Crear nuevo preset")
+            self.save_preset_btn.setToolTip("Crea un preset compartido disponible para cualquier juego.")
+            self.update_preset_btn = QtWidgets.QPushButton("Actualizar preset")
+            self.delete_preset_btn = QtWidgets.QPushButton("Borrar preset")
             preset_layout.addWidget(self.preset_combo, 1)
             preset_layout.addWidget(self.apply_preset_btn)
             preset_layout.addWidget(self.save_preset_btn)
@@ -1463,18 +1578,22 @@ def qt_main():
                 label = meta["label"]
                 desc = meta["description"]
                 recommended = meta["recommended"]
+                important = meta.get("important", False)
                 system_recommended = key in self.system_recommended
                 suffix = ""
                 if system_recommended:
                     suffix = "  - sistema"
                 elif recommended:
                     suffix = "  - recomendado"
+                elif important:
+                    suffix = "  - importante"
                 text = label + suffix
                 cb = QtWidgets.QCheckBox(text)
                 cb.setObjectName("launchOption")
                 cb.setToolTip(f"{desc}\n\nAnade: {meta['tokens']}")
                 cb.setProperty("recommended", "true" if recommended else "false")
                 cb.setProperty("systemRecommended", "true" if system_recommended else "false")
+                cb.setProperty("important", "true" if important else "false")
                 cb.setProperty("optionKey", key)
                 cb.installEventFilter(self)
                 cb.stateChanged.connect(self.update_command)
@@ -1491,15 +1610,17 @@ def qt_main():
 
             res_box = QtWidgets.QGroupBox("Resolucion Gamescope")
             res_layout = QtWidgets.QHBoxLayout(res_box)
-            self.real_width = QtWidgets.QSpinBox()
+            self.real_width = NoWheelSpinBox()
             self.real_width.setRange(0, 10000)
             self.real_width.setSuffix(" px")
-            self.real_height = QtWidgets.QSpinBox()
+            self.real_height = NoWheelSpinBox()
             self.real_height.setRange(0, 10000)
             self.real_height.setSuffix(" px")
-            self.real_refresh = QtWidgets.QSpinBox()
+            self.real_refresh = NoWheelSpinBox()
             self.real_refresh.setRange(0, 1000)
             self.real_refresh.setSuffix(" Hz")
+            for spin in (self.real_width, self.real_height, self.real_refresh):
+                spin.setToolTip("Edita escribiendo o con las flechas. La rueda del raton esta desactivada para no cambiar valores al desplazarte.")
             self.apply_resolution_btn = QtWidgets.QPushButton("Aplicar resolucion")
             self.apply_resolution_btn.setToolTip("Usa los valores de ancho/alto/Hz en el comando Gamescope y activa Resolucion real Gamescope.")
             self.detect_display_btn = QtWidgets.QPushButton("Usar monitor principal")
@@ -1613,7 +1734,7 @@ def qt_main():
             external = self.is_external_game()
             self.open_protondb_btn.setEnabled(not external)
             self.recommend_btn.setEnabled(not external)
-            self.launch_btn.setEnabled(external)
+            self.launch_btn.setEnabled(bool(self.current_game))
 
         def populate_games(self, preferred_appid=None):
             self.games = merged_games(self.root, self.app_config)
@@ -1666,12 +1787,12 @@ def qt_main():
             self.custom_post.setText(custom.get("post", ""))
             self.custom_pre.blockSignals(False)
             self.custom_post.blockSignals(False)
-            res = detect_gamescope_resolution(current) if flags.get("REALRES") else custom.get("gamescope_res", {})
-            self.active_gamescope_res = {
-                "width": int(res.get("width") or 0),
-                "height": int(res.get("height") or 0),
-                "refresh": int(res.get("refresh") or 0) or "",
-            }
+            saved_res = custom.get("gamescope_res", {})
+            display_res = display_resolution_or_empty(self.system.get("display", {}))
+            res = detect_gamescope_resolution(current) if flags.get("REALRES") else saved_res
+            if not int((res or {}).get("width") or 0) or not int((res or {}).get("height") or 0):
+                res = display_res
+            self.active_gamescope_res = display_resolution_or_empty(res)
             self.set_resolution_fields(res)
             self.refresh_presets()
             self.update_command()
@@ -1865,15 +1986,29 @@ def qt_main():
                 return {}
             return self.app_config.setdefault("presets", {}).setdefault(self.current_game["appid"], {})
 
+        def shared_presets(self):
+            return get_shared_presets(self.app_config)
+
+        def preset_from_ref(self, ref):
+            scope, name = split_preset_ref(ref)
+            if scope == "shared":
+                return scope, name, self.shared_presets().get(name)
+            if scope == "game":
+                return scope, name, self.game_presets().get(name)
+            return "", "", None
+
         def refresh_presets(self):
             self.preset_combo.blockSignals(True)
             self.preset_combo.clear()
-            presets = self.game_presets()
-            if not presets:
+            shared = self.shared_presets()
+            game = self.game_presets()
+            if not shared and not game:
                 self.preset_combo.addItem("Sin presets guardados", "")
             else:
-                for name in sorted(presets):
-                    self.preset_combo.addItem(name, name)
+                for name in sorted(shared):
+                    self.preset_combo.addItem(f"Compartido: {name}", preset_ref("shared", name))
+                for name in sorted(game):
+                    self.preset_combo.addItem(f"Juego: {name}", preset_ref("game", name))
             self.preset_combo.blockSignals(False)
 
         def current_preset_payload(self):
@@ -1888,10 +2023,10 @@ def qt_main():
             }
 
         def apply_preset(self):
-            name = self.preset_combo.currentData()
-            if not name:
+            ref = self.preset_combo.currentData()
+            if not ref:
                 return
-            preset = self.game_presets().get(name)
+            scope, name, preset = self.preset_from_ref(ref)
             if not preset:
                 return
             selected = set(preset.get("options", []))
@@ -1915,75 +2050,87 @@ def qt_main():
                 self.command_edit.setPlainText(command)
             QtWidgets.QMessageBox.information(
                 self,
-                "Preset aplicado",
-                f"Preset cargado en pantalla:\n\n{name}\n\nRevisa el comando final y pulsa Guardar opciones para escribirlo.",
+                "Preset cargado",
+                f"Preset cargado en pantalla:\n\n{name}\n\nOrigen: {'compartido' if scope == 'shared' else 'del juego'}\n\nRevisa el comando final y pulsa Guardar opciones para escribirlo en Steam.",
             )
 
         def save_preset(self):
             if not self.current_game:
                 return
-            name, ok = QtWidgets.QInputDialog.getText(self, "Guardar preset", "Nombre del preset:")
+            name, ok = QtWidgets.QInputDialog.getText(self, "Crear nuevo preset", "Nombre del preset compartido:")
             name = name.strip()
             if not ok or not name:
                 return
-            presets = self.game_presets()
+            presets = self.shared_presets()
             if name in presets:
                 reply = QtWidgets.QMessageBox.question(
                     self,
-                    "Sobreescribir preset",
-                    f"Ya existe un preset llamado:\n\n{name}\n\nQuieres sobreescribirlo con las opciones actuales?",
+                    "Sobreescribir preset compartido",
+                    f"Ya existe un preset compartido llamado:\n\n{name}\n\nQuieres sobreescribirlo con las opciones actuales?",
                 )
                 if reply != QtWidgets.QMessageBox.Yes:
                     return
             else:
                 reply = QtWidgets.QMessageBox.question(
                     self,
-                    "Guardar preset",
-                    f"Guardar un preset nuevo llamado:\n\n{name}\n\ncon las opciones actuales?",
+                    "Crear nuevo preset",
+                    f"Crear un preset compartido llamado:\n\n{name}\n\ncon las opciones actuales?",
                 )
                 if reply != QtWidgets.QMessageBox.Yes:
                     return
             presets[name] = self.current_preset_payload()
             save_app_config(self.app_config)
             self.refresh_presets()
-            index = self.preset_combo.findData(name)
+            index = self.preset_combo.findData(preset_ref("shared", name))
             if index >= 0:
                 self.preset_combo.setCurrentIndex(index)
-            QtWidgets.QMessageBox.information(self, "Preset guardado", f"Preset guardado:\n\n{name}")
+            QtWidgets.QMessageBox.information(self, "Preset creado", f"Preset compartido creado:\n\n{name}")
 
         def update_preset(self):
             if not self.current_game:
                 return
-            name = self.preset_combo.currentData()
-            if not name:
+            ref = self.preset_combo.currentData()
+            if not ref:
+                return
+            scope, name, preset = self.preset_from_ref(ref)
+            if not preset:
                 return
             reply = QtWidgets.QMessageBox.question(
                 self,
                 "Actualizar preset",
-                f"Actualizar el preset seleccionado con las opciones actuales?\n\n{name}\n\nSe sobreescribira su contenido.",
+                f"Actualizar el preset seleccionado con las opciones actuales?\n\n{name}\n\nOrigen: {'compartido' if scope == 'shared' else 'del juego'}\n\nSe sobreescribira su contenido.",
             )
             if reply != QtWidgets.QMessageBox.Yes:
                 return
-            self.game_presets()[name] = self.current_preset_payload()
+            if scope == "shared":
+                self.shared_presets()[name] = self.current_preset_payload()
+            else:
+                self.game_presets()[name] = self.current_preset_payload()
             save_app_config(self.app_config)
             self.refresh_presets()
-            index = self.preset_combo.findData(name)
+            index = self.preset_combo.findData(preset_ref(scope, name))
             if index >= 0:
                 self.preset_combo.setCurrentIndex(index)
             QtWidgets.QMessageBox.information(self, "Preset actualizado", f"Preset actualizado:\n\n{name}")
 
         def delete_preset(self):
-            name = self.preset_combo.currentData()
-            if not name:
+            ref = self.preset_combo.currentData()
+            if not ref:
+                return
+            scope, name, preset = self.preset_from_ref(ref)
+            if not preset:
                 return
             reply = QtWidgets.QMessageBox.question(
                 self,
                 "Borrar preset",
-                f"Borrar definitivamente este preset?\n\n{name}\n\nEsta accion no borra las opciones ya guardadas en Steam.",
+                f"Borrar definitivamente este preset?\n\n{name}\n\nOrigen: {'compartido' if scope == 'shared' else 'del juego'}\n\nEsta accion no borra las opciones ya guardadas en Steam.",
             )
             if reply != QtWidgets.QMessageBox.Yes:
                 return
-            self.game_presets().pop(name, None)
+            if scope == "shared":
+                self.shared_presets().pop(name, None)
+            else:
+                self.game_presets().pop(name, None)
             save_app_config(self.app_config)
             self.refresh_presets()
             QtWidgets.QMessageBox.information(self, "Preset borrado", f"Preset borrado:\n\n{name}")
@@ -2011,7 +2158,19 @@ def qt_main():
             return command.replace("%command%", base)
 
         def launch_current_game(self):
-            if not self.current_game or not self.current_game.get("external"):
+            if not self.current_game:
+                return
+            if not self.current_game.get("external"):
+                steam_cmd = shutil.which("steam")
+                if steam_cmd:
+                    subprocess.Popen([steam_cmd, "-applaunch", self.current_game["appid"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                else:
+                    open_url(f"steam://run/{self.current_game['appid']}")
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Juego lanzado",
+                    f"Lanzando desde Steam:\n\n{self.current_game['name']}\n\nUsara las opciones que esten guardadas en Steam.",
+                )
                 return
             command = self.external_shell_command()
             if not command:
@@ -2056,7 +2215,8 @@ def qt_main():
                 "0.7.6 - Presets aplican opciones reconstruidas y recuerdan acciones como HDR Unreal.\n"
                 "0.7.7 - Resolucion Gamescope solo cambia al aplicarla y pruebas de presets.\n"
                 "0.7.8 - VRR cap automatico usando Hz aplicados.\n"
-                "0.7.9 - VRR cap usa limitador MangoHud porque Gamescope redondea a divisores.\n\n"
+                "0.7.9 - VRR cap usa limitador MangoHud porque Gamescope redondea a divisores.\n"
+                "0.8.0 - Presets compartidos, controles sin rueda accidental, lanzamiento Steam y resumen ProtonDB oficial.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )

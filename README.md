@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.7.9
+Version: 0.8.0
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -37,9 +37,9 @@ tocar `localconfig.vdf`.
 - Shows system-aware recommendations based on detected GPU, session type, and installed tools.
 - Detects Bazzite, SteamOS-style sessions, Lenovo Legion Go devices, and handheld-friendly setups.
 - Detects the primary monitor resolution and can force Gamescope to expose the real physical resolution to the game.
-- Provides per-game presets stored in a JSON config file.
-- Lets you save, apply, and delete your own presets.
-- Shows ProtonDB community recommendations when available.
+- Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
+- Lets you create, load, update, and delete your own shared presets.
+- Shows ProtonDB official summary data and community launch hints when available.
 - Opens the selected game's ProtonDB page.
 - Can apply Unreal Engine HDR config tweaks for games that need them.
 
@@ -275,6 +275,13 @@ The cap uses the refresh value currently applied in the Gamescope resolution
 section. Press `Aplicar resolucion` or `Usar monitor principal` before saving if
 you changed the Hz fields.
 
+## Usability Notes
+
+Preset selectors and Gamescope resolution spin boxes ignore the mouse wheel, so
+scrolling through the app will not accidentally change the selected preset or
+width/height/Hz fields. New presets created from the GUI are shared by default
+and can be loaded for any game.
+
 ## Important Notes
 
 `PROTON_FSR4_UPGRADE=1` attempts to upgrade compatible FSR 3.1 paths to FSR4 in
@@ -324,3 +331,6 @@ support or game-specific configuration.
   applied monitor refresh rate.
 - 0.7.9: Changed `VRR cap automatico` to use MangoHud's FPS limiter instead of
   Gamescope's divisor-based limiter.
+- 0.8.0: Added shared user presets, disabled accidental mouse-wheel changes on
+  preset and resolution controls, enabled launching Steam games from the GUI,
+  highlighted key Gamescope options, and added official ProtonDB summary data.
