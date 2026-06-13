@@ -10,12 +10,13 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+import zlib
 from pathlib import Path
 
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.8.1"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -78,6 +79,7 @@ DEFAULT_APP_CONFIG = {
     "manual_games": [],
     "presets": {},
     "shared_presets": {},
+    "protondb_cache": {},
     "last_selected": [],
     "steam_root": "",
 }
@@ -97,9 +99,10 @@ OPTION_INFO = {
     },
     "HDR": {
         "label": "HDR via Gamescope",
-        "description": "Activa salida HDR en Gamescope y expone HDR a DXVK con ENABLE_GAMESCOPE_WSI=1 y DXVK_HDR=1.",
+        "description": "Activa salida HDR dentro de Gamescope y expone HDR a DXVK con ENABLE_GAMESCOPE_WSI=1 y DXVK_HDR=1. Necesita que Gamescope HDR/WSI este disponible.",
         "tokens": "ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope --hdr-enabled",
         "recommended": False,
+        "important": True,
     },
     "WAYLAND": {
         "label": "Wine/Proton Wayland",
@@ -112,6 +115,7 @@ OPTION_INFO = {
         "description": "Activa el flag HDR propio de Proton si tu build lo soporta. Complementa, no sustituye, Gamescope HDR.",
         "tokens": "PROTON_ENABLE_HDR=1",
         "recommended": False,
+        "important": True,
     },
     "FSR4": {
         "label": "FSR4 upgrade",
@@ -127,14 +131,14 @@ OPTION_INFO = {
     },
     "GAMESCOPE": {
         "label": "Gamescope fullscreen",
-        "description": "Ejecuta el juego dentro de Gamescope a pantalla completa. Necesario para HDR y util para aislar resolucion/modo de pantalla.",
+        "description": "Mete el juego dentro de Gamescope a pantalla completa. Es el contenedor/compositor: habilita HDR, VRR, escalado y control de pantalla. Por si solo no fuerza una resolucion concreta.",
         "tokens": "gamescope -f --",
         "recommended": False,
         "important": True,
     },
     "REALRES": {
         "label": "Resolucion real Gamescope",
-        "description": "Fuerza a Gamescope a exponer la resolucion fisica del monitor al juego con -W/-H y -w/-h. Util con escalado fraccional de KDE/Wayland.",
+        "description": "Anade -W/-H/-w/-h/-r para que Gamescope exponga al juego la resolucion y Hz reales del monitor. Requiere Gamescope; es el ajuste de modo/resolucion, no el contenedor.",
         "tokens": "gamescope -W <monitor_w> -H <monitor_h> -w <game_w> -h <game_h> -r <hz>",
         "recommended": False,
         "important": True,
@@ -524,6 +528,14 @@ def system_recommended_keys(system):
         keys.add("GAMEMODE")
     if system["tools"].get("mangohud"):
         keys.add("MANGOHUD")
+    if system["tools"].get("gamescope"):
+        keys.add("GAMESCOPE")
+        display = system.get("display", {})
+        if int(display.get("width") or 0) and int(display.get("height") or 0):
+            keys.add("REALRES")
+    if system["tools"].get("gamescope") and system.get("gamescope_wsi"):
+        keys.add("HDR")
+        keys.add("PROTONHDR")
     if system["session"].get("type") == "wayland":
         keys.add("WAYLAND")
     if system.get("device", {}).get("is_handheld"):
@@ -545,7 +557,7 @@ def recommendation_reasons(system):
     if system["session"].get("type") == "wayland":
         reasons.append("Sesion Wayland detectada: Proton Wayland puede merecer prueba por juego.")
     if system["tools"].get("gamescope") and system["gamescope_wsi"]:
-        reasons.append("Gamescope + WSI detectados: HDR via Gamescope esta disponible.")
+        reasons.append("Gamescope + WSI detectados: se recomiendan Gamescope, resolucion real y HDR via Gamescope para juegos compatibles.")
     if system.get("device", {}).get("is_bazzite"):
         reasons.append("Bazzite detectado: presets handheld y Gamescope encajan bien con Gaming Mode.")
     if system.get("device", {}).get("is_steamos"):
@@ -668,6 +680,8 @@ def merged_games(root, config):
                 "exe": exe,
                 "proton": external.get("proton", ""),
                 "prefix": external.get("prefix", ""),
+                "steam_shortcut": bool(external.get("steam_shortcut")),
+                "steam_shortcut_appid": external.get("steam_shortcut_appid", ""),
             }
         )
     return sorted(games, key=lambda g: g["name"].casefold())
@@ -751,6 +765,109 @@ def localconfig_path(root):
         if str(cfg) == choice or cfg.parts[-3] == choice:
             return cfg
     sys.exit(1)
+
+
+def shortcuts_path(root):
+    return localconfig_path(root).with_name("shortcuts.vdf")
+
+
+def signed_32(value):
+    value &= 0xFFFFFFFF
+    return value - 0x100000000 if value & 0x80000000 else value
+
+
+def steam_shortcut_appid(name, exe):
+    raw = zlib.crc32(f"{exe}{name}".encode("utf-8", "replace")) | 0x80000000
+    return signed_32(raw)
+
+
+def load_shortcuts(path):
+    try:
+        import vdf
+        if path.exists() and path.stat().st_size:
+            with path.open("rb") as handle:
+                data = vdf.binary_load(handle)
+        else:
+            data = {"shortcuts": {}}
+    except Exception:
+        data = {"shortcuts": {}}
+    shortcuts = data.setdefault("shortcuts", {})
+    if not isinstance(shortcuts, dict):
+        data["shortcuts"] = {}
+    return data
+
+
+def dump_shortcuts(path, data):
+    import vdf
+    path.parent.mkdir(parents=True, exist_ok=True)
+    backup = None
+    if path.exists():
+        backup = path.with_suffix(path.suffix + "." + _dt.datetime.now().strftime("%Y%m%d-%H%M%S") + ".bak")
+        shutil.copy2(path, backup)
+    with path.open("wb") as handle:
+        vdf.binary_dump(data, handle)
+    return backup
+
+
+def shortcut_entry(name, exe, launch_options=""):
+    exe_path = Path(exe)
+    start_dir = str(exe_path.parent) + "/"
+    return {
+        "appid": steam_shortcut_appid(name, str(exe_path)),
+        "AppName": name,
+        "Exe": f'"{exe_path}"',
+        "StartDir": start_dir,
+        "icon": "",
+        "ShortcutPath": "",
+        "LaunchOptions": launch_options,
+        "IsHidden": 0,
+        "AllowDesktopConfig": 1,
+        "AllowOverlay": 1,
+        "OpenVR": 0,
+        "Devkit": 0,
+        "DevkitGameID": "",
+        "DevkitOverrideAppID": 0,
+        "LastPlayTime": 0,
+        "FlatpakAppID": "",
+        "sortas": "",
+        "tags": {"0": APP_NAME},
+    }
+
+
+def find_shortcut(data, name, exe):
+    target_exe = f'"{Path(exe)}"'
+    shortcuts = data.setdefault("shortcuts", {})
+    for key, entry in shortcuts.items():
+        if str(entry.get("AppName", "")) == name and str(entry.get("Exe", "")) == target_exe:
+            return key, entry
+    return None, None
+
+
+def add_steam_shortcut(root, name, exe, launch_options=""):
+    path = shortcuts_path(root)
+    data = load_shortcuts(path)
+    shortcuts = data.setdefault("shortcuts", {})
+    key, entry = find_shortcut(data, name, exe)
+    if entry is None:
+        existing_ids = [int(k) for k in shortcuts if str(k).isdigit()]
+        key = str(max(existing_ids, default=-1) + 1)
+        entry = shortcut_entry(name, exe, launch_options)
+        shortcuts[key] = entry
+    else:
+        entry["LaunchOptions"] = launch_options
+    backup = dump_shortcuts(path, data)
+    return {"path": path, "backup": backup, "appid": entry.get("appid"), "key": key}
+
+
+def update_steam_shortcut_launch_options(root, name, exe, launch_options):
+    path = shortcuts_path(root)
+    data = load_shortcuts(path)
+    _, entry = find_shortcut(data, name, exe)
+    if entry is None:
+        return None
+    entry["LaunchOptions"] = launch_options
+    backup = dump_shortcuts(path, data)
+    return {"path": path, "backup": backup, "appid": entry.get("appid")}
 
 
 def find_app_block(text, appid):
@@ -1033,6 +1150,41 @@ def protondb_summary(appid):
         return {}
 
 
+def protondb_cached_summary(config, appid, refresh=False):
+    cache = config.setdefault("protondb_cache", {})
+    item = cache.get(str(appid), {})
+    now = int(_dt.datetime.now().timestamp())
+    max_age = 14 * 24 * 60 * 60
+    if item and not refresh and now - int(item.get("timestamp") or 0) < max_age:
+        summary = item.get("summary", {})
+        return summary if isinstance(summary, dict) else {}
+    summary = protondb_summary(appid)
+    if summary:
+        cache[str(appid)] = {"timestamp": now, "summary": summary}
+    return summary
+
+
+def protondb_tier(summary):
+    return str((summary or {}).get("tier") or (summary or {}).get("bestReportedTier") or "").strip().lower()
+
+
+def protondb_tier_label(summary):
+    tier = protondb_tier(summary)
+    return tier.upper() if tier else ""
+
+
+def protondb_tier_color(tier):
+    colors = {
+        "platinum": ("#d7f3ff", "#0f5f78"),
+        "gold": ("#ffe082", "#5f4300"),
+        "silver": ("#e0e0e0", "#343a40"),
+        "bronze": ("#d6a46f", "#4a2a0a"),
+        "borked": ("#ffcdd2", "#7f130f"),
+        "pending": ("#eeeeee", "#5f6368"),
+    }
+    return colors.get(str(tier).lower(), ("#ffffff", "#263238"))
+
+
 def protondb_summary_lines(summary):
     if not summary:
         return []
@@ -1083,7 +1235,7 @@ def extract_launch_hints(text):
 
 def protondb_recommendations(game, config):
     reports = protondb_reports(game["appid"], config)
-    summary = protondb_summary(game["appid"])
+    summary = protondb_cached_summary(config, game["appid"])
     if not reports:
         lines = [f"ProtonDB: {game['name']} ({game['appid']})", ""]
         lines.extend(protondb_summary_lines(summary))
@@ -1138,7 +1290,7 @@ def protondb_recommendations(game, config):
 
 def protondb_recommendation_data(game, config):
     reports = protondb_reports(game["appid"], config)
-    summary = protondb_summary(game["appid"])
+    summary = protondb_cached_summary(config, game["appid"])
     data = {"text": "", "launch_hints": [], "reports": len(reports), "summary": summary}
     if not reports:
         lines = [f"ProtonDB: {game['name']} ({game['appid']})", ""]
@@ -1369,8 +1521,8 @@ def qt_main():
                 QLabel#hint { color: #5f6368; }
                 QListWidget#gameList::item { min-height: 34px; padding: 3px; }
                 QCheckBox[recommended="true"] {
-                    background: #e8f5e9;
-                    border: 1px solid #6abf69;
+                    background: #fff8e1;
+                    border: 1px solid #ffca28;
                     border-radius: 6px;
                     padding: 4px;
                     font-weight: 700;
@@ -1389,8 +1541,8 @@ def qt_main():
                     font-weight: 700;
                 }
                 QCheckBox[important="true"] {
-                    background: #e0f7fa;
-                    border: 1px solid #00acc1;
+                    background: #fff8e1;
+                    border: 1px solid #ffca28;
                     border-radius: 6px;
                     padding: 4px;
                     font-weight: 800;
@@ -1542,7 +1694,8 @@ def qt_main():
             action_layout = QtWidgets.QHBoxLayout(action_box)
             self.recommend_btn = QtWidgets.QPushButton("Recomendaciones")
             self.open_protondb_btn = QtWidgets.QPushButton("Abrir ProtonDB")
-            self.apply_system_btn = QtWidgets.QPushButton("Aplicar sistema")
+            self.apply_system_btn = QtWidgets.QPushButton("Marcar recomendadas")
+            self.apply_system_btn.setToolTip("Marca las opciones amarillas recomendadas segun tu sistema detectado. No guarda nada en Steam hasta pulsar Guardar opciones.")
             self.launch_btn = QtWidgets.QPushButton("Lanzar")
             self.launch_btn.setObjectName("launchButton")
             self.about_btn = QtWidgets.QPushButton("Acerca de")
@@ -1736,20 +1889,55 @@ def qt_main():
             self.recommend_btn.setEnabled(not external)
             self.launch_btn.setEnabled(bool(self.current_game))
 
+        def cached_game_summary(self, appid):
+            item = self.app_config.get("protondb_cache", {}).get(str(appid), {})
+            summary = item.get("summary", {})
+            return summary if isinstance(summary, dict) else {}
+
+        def game_label(self, game, summary=None):
+            summary = summary or self.cached_game_summary(game["appid"])
+            rating = protondb_tier_label(summary)
+            label = f"{game['name']}  ({game['appid']})"
+            if rating:
+                label += f"  [{rating}]"
+            if game.get("manual"):
+                label += "  - manual"
+            return label
+
+        def style_game_item(self, item, summary):
+            rating = protondb_tier(summary)
+            if not rating:
+                return
+            bg, fg = protondb_tier_color(rating)
+            item.setBackground(QtGui.QColor(bg))
+            item.setForeground(QtGui.QColor(fg))
+            item.setToolTip(
+                f"ProtonDB: {protondb_tier_label(summary)}"
+                + (f" - {summary.get('total')} reportes" if summary.get("total") is not None else "")
+            )
+
+        def update_current_item_rating(self, summary):
+            item = self.game_list.currentItem()
+            if not item:
+                return
+            game = item.data(QtCore.Qt.UserRole)
+            item.setText(self.game_label(game, summary))
+            self.style_game_item(item, summary)
+
         def populate_games(self, preferred_appid=None):
             self.games = merged_games(self.root, self.app_config)
             self.game_list.blockSignals(True)
             self.game_list.clear()
             preferred_row = 0
             for row, game in enumerate(self.games):
-                label = f"{game['name']}  ({game['appid']})"
-                if game.get("manual"):
-                    label += "  - manual"
+                summary = self.cached_game_summary(game["appid"])
+                label = self.game_label(game, summary)
                 item = QtWidgets.QListWidgetItem(label)
                 item.setData(QtCore.Qt.UserRole, game)
                 icon_path = find_game_icon(self.root, game["appid"])
                 if icon_path:
                     item.setIcon(QtGui.QIcon(str(icon_path)))
+                self.style_game_item(item, summary)
                 self.game_list.addItem(item)
                 if preferred_appid and game["appid"] == preferred_appid:
                     preferred_row = row
@@ -1766,9 +1954,17 @@ def qt_main():
             save_app_config(self.app_config)
             current = self.current_game_launch_options()
             source = "Externo" if self.current_game.get("external") else "Steam"
+            summary = {}
+            if not self.current_game.get("external"):
+                summary = protondb_cached_summary(self.app_config, self.current_game["appid"])
+                save_app_config(self.app_config)
+                self.update_current_item_rating(summary)
+            rating = protondb_tier_label(summary)
+            rating_line = f"\nProtonDB: {rating}" if rating else ""
             self.current_label.setText(
                 f"{self.current_game['name']} ({self.current_game['appid']}) - {source}\n"
                 f"Actual: {current or '(sin opciones)'}"
+                f"{rating_line}"
             )
             self.set_action_availability()
             flags = detect_flags(current)
@@ -1832,9 +2028,12 @@ def qt_main():
             proton_btn = QtWidgets.QPushButton("Buscar Proton")
             proton_row.addWidget(proton_combo, 1)
             proton_row.addWidget(proton_btn)
+            add_to_steam = QtWidgets.QCheckBox("Añadir tambien a la biblioteca de Steam")
+            add_to_steam.setToolTip("Crea un acceso directo en shortcuts.vdf. Steam debe reiniciarse para verlo.")
             external_layout.addRow("Nombre:", external_name)
             external_layout.addRow("Ejecutable:", exe_row)
             external_layout.addRow("Proton:", proton_row)
+            external_layout.addRow("", add_to_steam)
             tabs.addTab(external_tab, "Ejecutable Proton")
 
             def browse_exe():
@@ -1916,11 +2115,49 @@ def qt_main():
                     self.populate_games(game_id)
                     return
             prefix = str(APP_CONFIG_DIR / "compatdata" / game_id)
-            self.app_config.setdefault("external_games", []).append(
-                {"id": game_id, "name": name, "exe": exe, "proton": proton, "prefix": prefix}
-            )
+            external_payload = {"id": game_id, "name": name, "exe": exe, "proton": proton, "prefix": prefix}
+            shortcut_note = ""
+            if add_to_steam.isChecked():
+                reopen_steam = False
+                if steam_is_running():
+                    reply = QtWidgets.QMessageBox.question(
+                        self,
+                        "Cerrar Steam para anadir acceso directo",
+                        "Steam esta abierto. Para anadir el juego externo a la biblioteca sin que Steam sobrescriba shortcuts.vdf, Proton Pilot puede cerrarlo ahora y volver a abrirlo despues.\n\nCerrar Steam y continuar?",
+                    )
+                    if reply == QtWidgets.QMessageBox.Yes:
+                        if not close_steam():
+                            QtWidgets.QMessageBox.warning(
+                                self,
+                                "No se pudo cerrar Steam",
+                                "No he podido cerrar Steam de forma fiable. Anado el perfil local, pero no el acceso directo de Steam.",
+                            )
+                        else:
+                            reopen_steam = True
+                    else:
+                        QtWidgets.QMessageBox.information(
+                            self,
+                            "Acceso directo omitido",
+                            "Anado el perfil local, pero no escribo shortcuts.vdf mientras Steam esta abierto.",
+                        )
+                if not steam_is_running():
+                    try:
+                        result = add_steam_shortcut(self.root, name, exe, "")
+                        external_payload["steam_shortcut"] = True
+                        external_payload["steam_shortcut_appid"] = result.get("appid", "")
+                        shortcut_note = f"\n\nAcceso directo anadido a Steam:\n{result['path']}"
+                    except Exception as exc:
+                        shortcut_note = f"\n\nNo he podido anadirlo a Steam: {exc}"
+                if reopen_steam:
+                    if open_steam(self.root):
+                        shortcut_note += "\nSteam se ha vuelto a abrir."
+                    else:
+                        shortcut_note += "\nNo he podido volver a abrir Steam; abrelo manualmente."
+            self.app_config.setdefault("external_games", []).append(external_payload)
             save_app_config(self.app_config)
             self.populate_games(game_id)
+            if shortcut_note:
+                QtWidgets.QMessageBox.information(self, "Juego externo anadido", f"Perfil anadido a Proton Pilot.{shortcut_note}")
 
         def selected_keys(self):
             return [key for key, cb in self.checks.items() if cb.isChecked()]
@@ -1935,16 +2172,24 @@ def qt_main():
         def show_option_detail(self, key):
             meta = OPTION_INFO[key]
             if key in self.system_recommended:
-                recommended = "Recomendada para tu sistema"
+                recommended = "Recomendada para tu sistema; el boton Marcar recomendadas la activara."
             elif meta["recommended"]:
                 recommended = "Recomendada por defecto"
+            elif meta.get("important"):
+                recommended = "Opcion importante: depende del juego, monitor y objetivo."
             else:
                 recommended = "Opcional / por juego"
+            extra = ""
+            if key == "GAMESCOPE":
+                extra = "\nDiferencia clave: Gamescope fullscreen crea el contenedor. Resolucion real Gamescope decide que resolucion/Hz se exponen dentro de ese contenedor."
+            elif key == "REALRES":
+                extra = "\nDiferencia clave: no sustituye a Gamescope fullscreen; le anade el modo nativo del monitor (-W/-H/-w/-h/-r)."
             self.option_detail.setText(
                 f"{meta['label']}\n\n"
                 f"{meta['description']}\n\n"
                 f"Anade: {meta['tokens']}\n"
                 f"Estado: {recommended}"
+                f"{extra}"
             )
 
         def update_command(self):
@@ -2192,7 +2437,17 @@ def qt_main():
             for key in self.system_recommended:
                 if key in self.checks:
                     self.checks[key].setChecked(True)
+            if "REALRES" in self.system_recommended:
+                display = display_resolution_or_empty(self.system.get("display", {}))
+                if display["width"] and display["height"]:
+                    self.active_gamescope_res = display
+                    self.set_resolution_fields(display)
             self.update_command()
+            QtWidgets.QMessageBox.information(
+                self,
+                "Recomendadas marcadas",
+                "He marcado las opciones amarillas recomendadas segun tu sistema detectado. Revisa el comando final y pulsa Guardar opciones para escribirlo.",
+            )
 
         def show_about(self):
             QtWidgets.QMessageBox.information(
@@ -2216,7 +2471,8 @@ def qt_main():
                 "0.7.7 - Resolucion Gamescope solo cambia al aplicarla y pruebas de presets.\n"
                 "0.7.8 - VRR cap automatico usando Hz aplicados.\n"
                 "0.7.9 - VRR cap usa limitador MangoHud porque Gamescope redondea a divisores.\n"
-                "0.8.0 - Presets compartidos, controles sin rueda accidental, lanzamiento Steam y resumen ProtonDB oficial.\n\n"
+                "0.8.0 - Presets compartidos, controles sin rueda accidental, lanzamiento Steam y resumen ProtonDB oficial.\n"
+                "0.8.1 - Recomendadas amarillas, ratings ProtonDB en juegos y accesos directos Steam externos.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
@@ -2285,10 +2541,49 @@ def qt_main():
                     return
                 self.app_config.setdefault("external_launch_options", {})[self.current_game["appid"]] = command
                 self.save_custom()
+                shortcut_note = ""
+                if self.current_game.get("steam_shortcut"):
+                    reopen_steam = False
+                    if steam_is_running():
+                        reply = QtWidgets.QMessageBox.question(
+                            self,
+                            "Cerrar Steam para actualizar acceso directo",
+                            "Este perfil externo tambien existe en la biblioteca de Steam. Para actualizar sus launch options sin que Steam sobrescriba shortcuts.vdf, Proton Pilot puede cerrar Steam y volver a abrirlo.\n\nCerrar Steam y continuar?",
+                        )
+                        if reply == QtWidgets.QMessageBox.Yes:
+                            if not close_steam():
+                                QtWidgets.QMessageBox.warning(
+                                    self,
+                                    "No se pudo cerrar Steam",
+                                    "He guardado el perfil local, pero no he actualizado el acceso directo de Steam.",
+                                )
+                            else:
+                                reopen_steam = True
+                        else:
+                            shortcut_note = "\n\nNo se ha actualizado el acceso directo de Steam porque Steam seguia abierto."
+                    if not steam_is_running():
+                        try:
+                            result = update_steam_shortcut_launch_options(
+                                self.root,
+                                self.current_game["name"],
+                                self.current_game["exe"],
+                                command,
+                            )
+                            if result:
+                                shortcut_note = f"\n\nAcceso directo de Steam actualizado:\n{result['path']}"
+                            else:
+                                shortcut_note = "\n\nNo he encontrado el acceso directo en shortcuts.vdf."
+                        except Exception as exc:
+                            shortcut_note = f"\n\nNo he podido actualizar el acceso directo de Steam: {exc}"
+                    if reopen_steam:
+                        if open_steam(self.root):
+                            shortcut_note += "\nSteam se ha vuelto a abrir."
+                        else:
+                            shortcut_note += "\nNo he podido volver a abrir Steam; abrelo manualmente."
                 QtWidgets.QMessageBox.information(
                     self,
                     "Guardado",
-                    f"Opciones guardadas para el perfil externo:\n\n{self.current_game['name']}",
+                    f"Opciones guardadas para el perfil externo:\n\n{self.current_game['name']}{shortcut_note}",
                 )
                 self.select_game(self.game_list.currentItem())
                 return

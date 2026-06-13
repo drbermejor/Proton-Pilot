@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.8.0
+Version: 0.8.1
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -31,6 +31,7 @@ tocar `localconfig.vdf`.
 - Detects installed Steam games from local app manifests.
 - Lets you add a Steam game manually by name and AppID when local detection misses it.
 - Lets you add an external Windows executable as a local Proton Pilot profile and launch it with an installed Proton build.
+- Can also add external executable profiles to Steam's non-Steam shortcut library.
 - Lets you choose and persist a custom Steam root path if automatic detection misses it.
 - Reads and writes Steam launch options in `localconfig.vdf`.
 - Creates a backup before writing changes.
@@ -39,7 +40,7 @@ tocar `localconfig.vdf`.
 - Detects the primary monitor resolution and can force Gamescope to expose the real physical resolution to the game.
 - Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
 - Lets you create, load, update, and delete your own shared presets.
-- Shows ProtonDB official summary data and community launch hints when available.
+- Shows ProtonDB official summary data, colored ratings, and community launch hints when available.
 - Opens the selected game's ProtonDB page.
 - Can apply Unreal Engine HDR config tweaks for games that need them.
 
@@ -89,6 +90,7 @@ proton-pilot
 
 - Python 3
 - PySide6 for the full GUI
+- `python-vdf` / `python3-vdf` for Steam non-Steam shortcut editing
 - Steam installed locally
 
 Optional tools detected and used by presets:
@@ -109,7 +111,7 @@ The installer supports dependency installation through:
 On Arch/CachyOS:
 
 ```bash
-sudo pacman -S python-pyside6 gamescope gamemode mangohud
+sudo pacman -S python-pyside6 python-vdf gamescope gamemode mangohud
 ```
 
 On Bazzite / Fedora Atomic-style systems, first check whether PySide6 is already
@@ -241,8 +243,10 @@ stored in Proton Pilot's config and launched with:
 STEAM_COMPAT_DATA_PATH=~/.config/proton-pilot/compatdata/<profile> proton run <exe>
 ```
 
-This is intentionally separate from Steam non-Steam shortcuts, because Steam stores
-those in a different shortcut database.
+When adding an external profile, Proton Pilot can optionally add it to Steam's
+non-Steam shortcut library by writing `shortcuts.vdf` with a backup. If that
+shortcut exists, saving the external profile can also update its Steam launch
+options.
 
 ## Forcing Real Gamescope Resolution
 
@@ -281,6 +285,14 @@ Preset selectors and Gamescope resolution spin boxes ignore the mouse wheel, so
 scrolling through the app will not accidentally change the selected preset or
 width/height/Hz fields. New presets created from the GUI are shared by default
 and can be loaded for any game.
+
+Yellow launch options are recommended or important for the detected system.
+`Marcar recomendadas` enables those detected recommendations in the UI, but it
+does not write anything to Steam until `Guardar opciones` is pressed.
+
+`Gamescope fullscreen` starts the game inside Gamescope. `Resolucion real
+Gamescope` is the mode-setting layer on top of that: it supplies the monitor's
+real width, height, and refresh rate with `-W/-H/-w/-h/-r`.
 
 ## Important Notes
 
@@ -334,3 +346,6 @@ support or game-specific configuration.
 - 0.8.0: Added shared user presets, disabled accidental mouse-wheel changes on
   preset and resolution controls, enabled launching Steam games from the GUI,
   highlighted key Gamescope options, and added official ProtonDB summary data.
+- 0.8.1: Improved system recommendations for Gamescope/HDR, added colored
+  ProtonDB ratings in the game list, clarified Gamescope option descriptions,
+  and added optional Steam non-Steam shortcut creation for external profiles.

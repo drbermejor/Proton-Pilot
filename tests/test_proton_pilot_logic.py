@@ -1,4 +1,5 @@
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -94,6 +95,31 @@ class ProtonPilotLogicTests(unittest.TestCase):
                 self.assertEqual("--mangoapp" in rebuilt or "mangohud" in rebuilt, "MANGOHUD" in options)
                 self.assertEqual("gamemoderun" in rebuilt, "GAMEMODE" in options)
                 self.assertEqual("PROTON_FSR4_UPGRADE=1" in rebuilt, "FSR4" in options)
+
+    def test_steam_shortcut_add_and_update_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Steam"
+            cfg = root / "userdata/1/config"
+            cfg.mkdir(parents=True)
+            (cfg / "localconfig.vdf").write_text('"UserLocalConfigStore"\n{\n\t"apps"\n\t{\n\t}\n}\n')
+
+            added = proton_pilot.add_steam_shortcut(root, "Test Game", "/tmp/Test.exe", "mangohud %command%")
+            data = proton_pilot.load_shortcuts(added["path"])
+            self.assertEqual(data["shortcuts"]["0"]["AppName"], "Test Game")
+            self.assertEqual(data["shortcuts"]["0"]["LaunchOptions"], "mangohud %command%")
+
+            updated = proton_pilot.update_steam_shortcut_launch_options(
+                root, "Test Game", "/tmp/Test.exe", "gamemoderun %command%"
+            )
+            self.assertIsNotNone(updated["backup"])
+            data = proton_pilot.load_shortcuts(added["path"])
+            self.assertEqual(data["shortcuts"]["0"]["LaunchOptions"], "gamemoderun %command%")
+
+    def test_protondb_tier_helpers(self):
+        summary = {"tier": "gold", "total": 182}
+
+        self.assertEqual(proton_pilot.protondb_tier_label(summary), "GOLD")
+        self.assertEqual(proton_pilot.protondb_tier_color("gold"), ("#ffe082", "#5f4300"))
 
 
 if __name__ == "__main__":
