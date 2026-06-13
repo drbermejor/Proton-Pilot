@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.7.8
+Version: 0.7.9
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -264,8 +264,12 @@ Use `VRR cap automatico` with Gamescope/Adaptive Sync to cap FPS just below the
 applied refresh rate. Proton Pilot uses `Hz - 3`, so a 180 Hz display becomes:
 
 ```bash
-gamescope --framerate-limit 177
+MANGOHUD_CONFIG=fps_limit=177,no_display gamescope ... -- mangohud %command%
 ```
+
+This uses MangoHud's limiter because Gamescope's `--framerate-limit` is rounded
+as a divisor of the refresh rate on the tested local version, so `177` on a
+180 Hz display can behave like 180.
 
 The cap uses the refresh value currently applied in the Gamescope resolution
 section. Press `Aplicar resolucion` or `Usar monitor principal` before saving if
@@ -318,3 +322,5 @@ support or game-specific configuration.
   regression tests.
 - 0.7.8: Added `VRR cap automatico`, which derives a Gamescope FPS cap from the
   applied monitor refresh rate.
+- 0.7.9: Changed `VRR cap automatico` to use MangoHud's FPS limiter instead of
+  Gamescope's divisor-based limiter.

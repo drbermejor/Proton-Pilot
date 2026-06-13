@@ -55,9 +55,22 @@ class ProtonPilotLogicTests(unittest.TestCase):
         )
 
         self.assertIn("--adaptive-sync", command)
-        self.assertIn("--framerate-limit 177", command)
+        self.assertIn("MANGOHUD_CONFIG=fps_limit=177,no_display", command)
+        self.assertIn("gamescope -f", command)
+        self.assertIn("-- mangohud %command%", command)
+        self.assertNotIn("--framerate-limit 177", command)
 
     def test_vrr_cap_detection_does_not_confuse_fixed_caps(self):
+        self.assertTrue(
+            proton_pilot.detect_flags("MANGOHUD_CONFIG=fps_limit=177,no_display gamescope -f -- mangohud %command%")[
+                "CAPVRR"
+            ]
+        )
+        self.assertFalse(
+            proton_pilot.detect_flags("MANGOHUD_CONFIG=fps_limit=177,no_display gamescope -f -- mangohud %command%")[
+                "MANGOHUD"
+            ]
+        )
         self.assertTrue(proton_pilot.detect_flags("gamescope -f --framerate-limit 177 -- %command%")["CAPVRR"])
         self.assertFalse(proton_pilot.detect_flags("gamescope -f --framerate-limit 72 -- %command%")["CAPVRR"])
         self.assertFalse(proton_pilot.detect_flags("gamescope -f --framerate-limit 60 -- %command%")["CAPVRR"])

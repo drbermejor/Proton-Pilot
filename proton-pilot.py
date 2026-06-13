@@ -15,7 +15,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.7.8"
+APP_VERSION = "0.7.9"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -162,8 +162,8 @@ OPTION_INFO = {
     },
     "CAPVRR": {
         "label": "VRR cap automatico",
-        "description": "Limita FPS unos pocos frames por debajo de los Hz aplicados para evitar tocar el techo VRR. Ejemplo: 180 Hz genera 177 FPS.",
-        "tokens": "gamescope --framerate-limit <Hz-3>",
+        "description": "Limita FPS unos pocos frames por debajo de los Hz aplicados para evitar tocar el techo VRR. Usa MangoHud porque Gamescope redondea su limitador a divisores del refresco.",
+        "tokens": "MANGOHUD_CONFIG=fps_limit=<Hz-3> mangohud",
         "recommended": False,
     },
     "GSFSR": {
@@ -793,6 +793,8 @@ def set_launch_options(config_path, appid, launch_options):
 
 def detect_flags(current):
     framerate_limit = detect_framerate_limit(current)
+    mangohud_fps_limit = detect_mangohud_fps_limit(current)
+    mangohud_hidden = detect_mangohud_no_display(current)
     return {
         "HDR": "--hdr-enabled" in current or "DXVK_HDR=1" in current,
         "WAYLAND": "PROTON_ENABLE_WAYLAND=1" in current,
@@ -803,14 +805,14 @@ def detect_flags(current):
         "NVIDIA": "PROTON_ENABLE_NVAPI=1" in current or "PROTON_HIDE_NVIDIA_GPU=0" in current,
         "DX12": "-dx12" in current,
         "GAMEMODE": "gamemoderun" in current,
-        "MANGOHUD": "mangohud" in current or "--mangoapp" in current,
+        "MANGOHUD": "--mangoapp" in current or ("mangohud" in current and not mangohud_hidden),
         "GAMESCOPE": "gamescope" in current,
         "REALRES": "-W " in current and "-H " in current and "-w " in current and "-h " in current,
         "HANDHELD800P": "-w 1280" in current and "-h 800" in current,
         "HANDHELD1200P": "-w 1920" in current and "-h 1200" in current,
         "CAP60": "--framerate-limit 60" in current,
         "CAP72": "--framerate-limit 72" in current,
-        "CAPVRR": bool(framerate_limit and framerate_limit not in {60, 72}),
+        "CAPVRR": bool(mangohud_fps_limit or (framerate_limit and framerate_limit not in {60, 72})),
         "GSFSR": "-F fsr" in current,
         "GSNIS": "-F nis" in current,
         "ADAPTIVE": "--adaptive-sync" in current,
@@ -834,6 +836,15 @@ def detect_gamescope_resolution(current):
 def detect_framerate_limit(current):
     match = re.search(r"(?:^|\s)--framerate-limit\s+(\d+)(?:\s|$)", current)
     return int(match.group(1)) if match else 0
+
+
+def detect_mangohud_fps_limit(current):
+    match = re.search(r"(?:^|\s)MANGOHUD_CONFIG=(?:\"[^\"]*|'[^']*|\S*)fps_limit=(\d+)", current)
+    return int(match.group(1)) if match else 0
+
+
+def detect_mangohud_no_display(current):
+    return bool(re.search(r"(?:^|\s)MANGOHUD_CONFIG=(?:\"[^\"]*|'[^']*|\S*)no_display", current))
 
 
 def vrr_cap_from_refresh(refresh, margin=3):
@@ -872,6 +883,11 @@ def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
     if "DX12" in selected:
         post_args.append("-dx12")
 
+    vrr_cap = vrr_cap_from_refresh((gamescope_res or {}).get("refresh")) if "CAPVRR" in selected else 0
+    if vrr_cap:
+        mango_config = f"fps_limit={vrr_cap}" if "MANGOHUD" in selected else f"fps_limit={vrr_cap},no_display"
+        parts.append(f"MANGOHUD_CONFIG={mango_config}")
+
     if use_gamescope:
         flags = ["-f"]
         if "REALRES" in selected and gamescope_res:
@@ -890,22 +906,20 @@ def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
             flags.extend(["--framerate-limit", "72"])
         elif "CAP60" in selected:
             flags.extend(["--framerate-limit", "60"])
-        elif "CAPVRR" in selected:
-            vrr_cap = vrr_cap_from_refresh((gamescope_res or {}).get("refresh"))
-            if vrr_cap:
-                flags.extend(["--framerate-limit", str(vrr_cap)])
         if "GSFSR" in selected:
             flags.extend(["-F", "fsr", "--sharpness", "5"])
         elif "GSNIS" in selected:
             flags.extend(["-F", "nis", "--sharpness", "5"])
         if "HDR" in selected:
             flags.append("--hdr-enabled")
-        if "MANGOHUD" in selected:
+        if "MANGOHUD" in selected and not vrr_cap:
             flags.append("--mangoapp")
         if "ADAPTIVE" in selected:
             flags.append("--adaptive-sync")
         parts.extend(["gamescope", *flags, "--"])
-    elif "MANGOHUD" in selected:
+    if vrr_cap:
+        parts.append("mangohud")
+    elif not use_gamescope and "MANGOHUD" in selected:
         parts.append("mangohud")
 
     if "GAMEMODE" in selected:
@@ -2040,7 +2054,9 @@ def qt_main():
                 "0.7.4 - Ruta Steam configurable y guardado seguro cerrando/reabriendo Steam.\n"
                 "0.7.5 - Las recomendaciones ya no se autoactivan al recargar un juego.\n"
                 "0.7.6 - Presets aplican opciones reconstruidas y recuerdan acciones como HDR Unreal.\n"
-                "0.7.7 - Resolucion Gamescope solo cambia al aplicarla y pruebas de presets.\n\n"
+                "0.7.7 - Resolucion Gamescope solo cambia al aplicarla y pruebas de presets.\n"
+                "0.7.8 - VRR cap automatico usando Hz aplicados.\n"
+                "0.7.9 - VRR cap usa limitador MangoHud porque Gamescope redondea a divisores.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
