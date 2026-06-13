@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.3"
+APP_VERSION = "0.8.4"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -1835,7 +1835,7 @@ def qt_main():
                 if icon_path:
                     item.setIcon(QtGui.QIcon(str(icon_path)))
                 self.style_game_item(item, summary)
-            self.game_list.addItem(item)
+                self.game_list.addItem(item)
             left.addWidget(self.game_list, 1)
             self.add_game_btn = QtWidgets.QPushButton("Añadir juego")
             self.edit_game_btn = QtWidgets.QPushButton("Editar manual")
@@ -2889,7 +2889,8 @@ def qt_main():
                 "0.8.0 - Presets compartidos, controles sin rueda accidental, lanzamiento Steam y resumen ProtonDB oficial.\n"
                 "0.8.1 - Recomendadas amarillas, ratings ProtonDB en juegos y accesos directos Steam externos.\n"
                 "0.8.2 - Tarjetas HDR/VRR, badge ProtonDB y recomendaciones VRR/Adaptive en rojo de prueba.\n"
-                "0.8.3 - Preset recomendado del sistema, panel de juego claro y gestion de manuales.\n\n"
+                "0.8.3 - Preset recomendado del sistema, panel de juego claro y gestion de manuales.\n"
+                "0.8.4 - Corrige listado inicial para mostrar todos los juegos detectados.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
