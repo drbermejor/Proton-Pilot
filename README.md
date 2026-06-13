@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.8.2
+Version: 0.8.3
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -32,6 +32,7 @@ tocar `localconfig.vdf`.
 - Lets you add a Steam game manually by name and AppID when local detection misses it.
 - Lets you add an external Windows executable as a local Proton Pilot profile and launch it with an installed Proton build.
 - Can also add external executable profiles to Steam's non-Steam shortcut library.
+- Lets you edit or remove manually added games, with confirmation before removal.
 - Lets you choose and persist a custom Steam root path if automatic detection misses it.
 - Reads and writes Steam launch options in `localconfig.vdf`.
 - Creates a backup before writing changes.
@@ -40,6 +41,7 @@ tocar `localconfig.vdf`.
 - Detects Bazzite, SteamOS-style sessions, Lenovo Legion Go devices, and handheld-friendly setups.
 - Detects the primary monitor resolution and can force Gamescope to expose the real physical resolution to the game.
 - Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
+- Provides an automatic shared `Recomendado del sistema` preset based on detected hardware and session.
 - Lets you create, load, update, and delete your own shared presets.
 - Shows ProtonDB official summary data, colored ratings, and community launch hints when available.
 - Opens the selected game's ProtonDB page.
@@ -228,6 +230,8 @@ you to open Steam manually.
 - `Guardar opciones` is highlighted in green.
 - `Borrar opciones` is highlighted in red and asks for confirmation before clearing
   the saved Steam launch options for the selected game.
+- The selected game panel shows the currently saved launch command and whether it
+  matches a saved preset.
 
 ## External Executables
 
@@ -356,3 +360,6 @@ support or game-specific configuration.
 - 0.8.2: Added clearer colored system status cards, explicit HDR/VRR detection,
   ProtonDB rating badges, MangoHud toggle help, and cautious VRR/Adaptive Sync
   recommendations.
+- 0.8.3: Added an automatic system-recommended preset, clearer selected-game
+  panel, manual game edit/removal, a more prominent start button, cleaner GPU
+  names, and removed launch confirmation popups.

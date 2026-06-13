@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.2"
+APP_VERSION = "0.8.3"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -370,6 +370,32 @@ def split_preset_ref(ref):
     return (scope or "game"), name
 
 
+def system_preset_name():
+    return "Recomendado del sistema"
+
+
+def system_preset_payload(system):
+    display = display_resolution_or_empty(system.get("display", {}))
+    options = sorted(system_recommended_keys(system), key=lambda key: list(OPTION_INFO).index(key) if key in OPTION_INFO else 999)
+    command = compose_launch(options, "", "", display)
+    return {
+        "options": options,
+        "custom_pre": "",
+        "custom_post": "",
+        "gamescope_res": display,
+        "command": command,
+        "builtin": True,
+    }
+
+
+def ensure_system_shared_preset(config, system):
+    config.setdefault("shared_presets", {})[system_preset_name()] = system_preset_payload(system)
+
+
+def normalize_command(command):
+    return " ".join(str(command or "").split())
+
+
 def ensure_display_preset(config, appid, display):
     width = int(display.get("width") or 0)
     height = int(display.get("height") or 0)
@@ -409,6 +435,19 @@ def strip_ansi(text):
     return re.sub(r"\x1b\[[0-9;]*m", "", text or "")
 
 
+def clean_gpu_name(line):
+    if not line:
+        return "GPU no detectada"
+    cleaned = re.sub(r"^\S+\s+(?:VGA compatible controller|3D controller|Display controller):\s*", "", line, flags=re.I)
+    bracket_names = re.findall(r"\[([^\[\]]*(?:Radeon|GeForce|RTX|GTX|Arc)[^\[\]]*)\]", cleaned, re.I)
+    if bracket_names:
+        return bracket_names[-1].strip()
+    cleaned = re.sub(r"\[[0-9a-fA-F:.]+\]", "", cleaned)
+    cleaned = re.sub(r"\(rev\s+[0-9a-fA-F]+\)", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -")
+    return cleaned or line.strip()
+
+
 def detect_system():
     lspci = command_output(["lspci", "-nnk"])
     os_release = read_os_release()
@@ -419,13 +458,13 @@ def detect_system():
     gpu_name = "GPU no detectada"
     if re.search(r"NVIDIA", lspci, re.I):
         gpu = "nvidia"
-        gpu_name = next((line.strip() for line in lspci.splitlines() if re.search(r"VGA|3D|Display", line, re.I)), "NVIDIA")
+        gpu_name = clean_gpu_name(next((line.strip() for line in lspci.splitlines() if re.search(r"VGA|3D|Display", line, re.I)), "NVIDIA"))
     elif re.search(r"AMD/ATI|Radeon|amdgpu", lspci, re.I):
         gpu = "amd"
-        gpu_name = next((line.strip() for line in lspci.splitlines() if re.search(r"VGA|3D|Display", line, re.I)), "AMD Radeon")
+        gpu_name = clean_gpu_name(next((line.strip() for line in lspci.splitlines() if re.search(r"VGA|3D|Display", line, re.I)), "AMD Radeon"))
     elif re.search(r"Intel", lspci, re.I):
         gpu = "intel"
-        gpu_name = next((line.strip() for line in lspci.splitlines() if re.search(r"VGA|3D|Display", line, re.I)), "Intel")
+        gpu_name = clean_gpu_name(next((line.strip() for line in lspci.splitlines() if re.search(r"VGA|3D|Display", line, re.I)), "Intel"))
 
     session = {
         "type": os_environ("XDG_SESSION_TYPE"),
@@ -1547,6 +1586,8 @@ def qt_main():
             self.config_path = localconfig_path(self.root)
             self.system = detect_system()
             self.system_recommended = system_recommended_keys(self.system)
+            ensure_system_shared_preset(self.app_config, self.system)
+            save_app_config(self.app_config)
             self.games = merged_games(self.root, self.app_config)
             self.checks = {}
             self.current_game = None
@@ -1599,6 +1640,32 @@ def qt_main():
                     border: 1px solid #b0bec5;
                     border-radius: 8px;
                     padding: 8px;
+                    font-weight: 800;
+                }
+                QFrame#gameInfo {
+                    background: #f8fafc;
+                    border: 1px solid #b0bec5;
+                    border-radius: 10px;
+                    padding: 8px;
+                }
+                QLabel#gameTitle {
+                    color: #17202a;
+                    font-size: 17px;
+                    font-weight: 900;
+                }
+                QLabel#gameCommand {
+                    color: #4f5b62;
+                    background: #ffffff;
+                    border: 1px solid #d6d9dd;
+                    border-radius: 6px;
+                    padding: 7px;
+                }
+                QLabel#presetStatus {
+                    color: #17633a;
+                    background: #e8f5e9;
+                    border: 1px solid #81c784;
+                    border-radius: 6px;
+                    padding: 6px;
                     font-weight: 800;
                 }
                 QFrame#hero {
@@ -1665,12 +1732,13 @@ def qt_main():
                 QPushButton:disabled { color: #9aa0a6; background: #f1f3f4; border-color: #d0d4d8; }
                 QPushButton#apply { font-weight: 700; }
                 QPushButton#launchButton {
-                    background: #e8f5e9;
-                    color: #17633a;
-                    border: 1px solid #67b26f;
-                    font-weight: 800;
+                    background: #1f9d55;
+                    color: white;
+                    border: 1px solid #157a3d;
+                    font-weight: 900;
+                    padding: 10px 18px;
                 }
-                QPushButton#launchButton:hover { background: #d7efd9; }
+                QPushButton#launchButton:hover { background: #187f45; }
                 QPushButton#saveButton {
                     background: #1f9d55;
                     color: white;
@@ -1767,15 +1835,38 @@ def qt_main():
                 if icon_path:
                     item.setIcon(QtGui.QIcon(str(icon_path)))
                 self.style_game_item(item, summary)
-                self.game_list.addItem(item)
+            self.game_list.addItem(item)
             left.addWidget(self.game_list, 1)
             self.add_game_btn = QtWidgets.QPushButton("Añadir juego")
+            self.edit_game_btn = QtWidgets.QPushButton("Editar manual")
+            self.remove_game_btn = QtWidgets.QPushButton("Quitar manual")
             left.addWidget(self.add_game_btn)
+            left.addWidget(self.edit_game_btn)
+            left.addWidget(self.remove_game_btn)
 
+            game_info = QtWidgets.QFrame()
+            game_info.setObjectName("gameInfo")
+            game_info_layout = QtWidgets.QVBoxLayout(game_info)
+            game_info_layout.setContentsMargins(8, 8, 8, 8)
+            title_row = QtWidgets.QHBoxLayout()
+            self.current_title = QtWidgets.QLabel("Selecciona un juego")
+            self.current_title.setObjectName("gameTitle")
+            self.current_title.setWordWrap(True)
+            self.launch_btn = QtWidgets.QPushButton("Iniciar juego")
+            self.launch_btn.setObjectName("launchButton")
+            self.launch_btn.setToolTip("Inicia el juego seleccionado. Steam usara las opciones que ya esten guardadas.")
+            title_row.addWidget(self.current_title, 1)
+            title_row.addWidget(self.launch_btn)
+            game_info_layout.addLayout(title_row)
             self.current_label = QtWidgets.QLabel("Selecciona un juego para ver sus opciones.")
-            self.current_label.setObjectName("hint")
+            self.current_label.setObjectName("gameCommand")
             self.current_label.setWordWrap(True)
-            right.addWidget(self.current_label)
+            game_info_layout.addWidget(self.current_label)
+            self.current_preset_label = QtWidgets.QLabel("Preset actual: sin detectar")
+            self.current_preset_label.setObjectName("presetStatus")
+            self.current_preset_label.setWordWrap(True)
+            game_info_layout.addWidget(self.current_preset_label)
+            right.addWidget(game_info)
             self.protondb_badge = QtWidgets.QLabel("ProtonDB: sin datos")
             self.protondb_badge.setObjectName("protondbBadge")
             self.protondb_badge.setWordWrap(True)
@@ -1826,13 +1917,10 @@ def qt_main():
             self.open_protondb_btn = QtWidgets.QPushButton("Abrir ProtonDB")
             self.apply_system_btn = QtWidgets.QPushButton("Marcar recomendadas")
             self.apply_system_btn.setToolTip("Marca las opciones amarillas recomendadas segun tu sistema detectado. No guarda nada en Steam hasta pulsar Guardar opciones.")
-            self.launch_btn = QtWidgets.QPushButton("Lanzar")
-            self.launch_btn.setObjectName("launchButton")
             self.about_btn = QtWidgets.QPushButton("Acerca de")
             action_layout.addWidget(self.recommend_btn)
             action_layout.addWidget(self.open_protondb_btn)
             action_layout.addWidget(self.apply_system_btn)
-            action_layout.addWidget(self.launch_btn)
             action_layout.addWidget(self.about_btn)
             action_layout.addStretch(1)
             right.addWidget(action_box)
@@ -1959,6 +2047,8 @@ def qt_main():
             self.game_list.currentItemChanged.connect(self.select_game)
             self.steam_path_btn.clicked.connect(self.choose_steam_path)
             self.add_game_btn.clicked.connect(self.add_manual_game)
+            self.edit_game_btn.clicked.connect(self.edit_manual_game)
+            self.remove_game_btn.clicked.connect(self.remove_manual_game)
             self.recommend_btn.clicked.connect(self.show_recommendations)
             self.open_protondb_btn.clicked.connect(self.open_protondb)
             self.apply_system_btn.clicked.connect(self.apply_system_recommended)
@@ -2024,6 +2114,9 @@ def qt_main():
             self.open_protondb_btn.setEnabled(not external)
             self.recommend_btn.setEnabled(not external)
             self.launch_btn.setEnabled(bool(self.current_game))
+            manual = bool(self.current_game and self.current_game.get("manual"))
+            self.edit_game_btn.setEnabled(manual)
+            self.remove_game_btn.setEnabled(manual)
 
         def cached_game_summary(self, appid):
             item = self.app_config.get("protondb_cache", {}).get(str(appid), {})
@@ -2106,6 +2199,7 @@ def qt_main():
             if not item:
                 return
             self.current_game = item.data(QtCore.Qt.UserRole)
+            ensure_system_shared_preset(self.app_config, self.system)
             ensure_game_builtin_presets(self.app_config, self.current_game["appid"])
             ensure_display_preset(self.app_config, self.current_game["appid"], self.system.get("display", {}))
             save_app_config(self.app_config)
@@ -2120,10 +2214,8 @@ def qt_main():
             else:
                 self.update_protondb_badge({})
             rating = protondb_tier_label(summary)
-            self.current_label.setText(
-                f"{self.current_game['name']} ({self.current_game['appid']}) - {source}\n"
-                f"Actual: {current or '(sin opciones)'}"
-            )
+            self.current_title.setText(f"{self.current_game['name']} ({self.current_game['appid']}) - {source}")
+            self.current_label.setText(f"Opciones actuales guardadas:\n{current or '(sin opciones)'}")
             self.set_action_availability()
             flags = detect_flags(current)
             custom = self.app_config.setdefault("custom", {}).get(self.current_game["appid"], {})
@@ -2149,6 +2241,7 @@ def qt_main():
             self.active_gamescope_res = display_resolution_or_empty(res)
             self.set_resolution_fields(res)
             self.refresh_presets()
+            self.select_matching_preset(current)
             self.update_command()
 
         def add_manual_game(self):
@@ -2317,6 +2410,143 @@ def qt_main():
             if shortcut_note:
                 QtWidgets.QMessageBox.information(self, "Juego externo anadido", f"Perfil anadido a Proton Pilot.{shortcut_note}")
 
+        def edit_manual_game(self):
+            if not self.current_game or not self.current_game.get("manual"):
+                return
+            if self.current_game.get("external"):
+                dialog = QtWidgets.QDialog(self)
+                dialog.setWindowTitle("Editar juego externo")
+                layout = QtWidgets.QFormLayout(dialog)
+                name_edit = QtWidgets.QLineEdit(self.current_game.get("name", ""))
+                exe_row = QtWidgets.QHBoxLayout()
+                exe_edit = QtWidgets.QLineEdit(self.current_game.get("exe", ""))
+                exe_btn = QtWidgets.QPushButton("Buscar")
+                exe_row.addWidget(exe_edit, 1)
+                exe_row.addWidget(exe_btn)
+                proton_combo = NoWheelComboBox()
+                current_proton = self.current_game.get("proton", "")
+                added_current = False
+                for tool in proton_tools(self.root):
+                    proton_combo.addItem(tool["name"], tool["path"])
+                    if tool["path"] == current_proton:
+                        proton_combo.setCurrentIndex(proton_combo.count() - 1)
+                        added_current = True
+                if current_proton and not added_current:
+                    proton_combo.addItem(f"Actual: {Path(current_proton).parent.name}", current_proton)
+                    proton_combo.setCurrentIndex(proton_combo.count() - 1)
+                proton_btn = QtWidgets.QPushButton("Buscar Proton")
+                proton_row = QtWidgets.QHBoxLayout()
+                proton_row.addWidget(proton_combo, 1)
+                proton_row.addWidget(proton_btn)
+                layout.addRow("Nombre:", name_edit)
+                layout.addRow("Ejecutable:", exe_row)
+                layout.addRow("Proton:", proton_row)
+
+                def browse_exe():
+                    path, _ = QtWidgets.QFileDialog.getOpenFileName(
+                        dialog,
+                        "Selecciona ejecutable",
+                        str(Path(exe_edit.text()).parent if exe_edit.text() else HOME),
+                        "Ejecutables (*.exe *.msi);;Todos los archivos (*)",
+                    )
+                    if path:
+                        exe_edit.setText(path)
+
+                def browse_proton():
+                    path, _ = QtWidgets.QFileDialog.getOpenFileName(dialog, "Selecciona el binario proton", str(HOME), "Proton (proton);;Todos los archivos (*)")
+                    if not path:
+                        folder = QtWidgets.QFileDialog.getExistingDirectory(dialog, "O selecciona una carpeta de Proton", str(HOME))
+                        path = str(Path(folder) / "proton") if folder else ""
+                    if not path:
+                        return
+                    proton_path = Path(path)
+                    if proton_path.is_dir():
+                        proton_path = proton_path / "proton"
+                    if not proton_path.exists():
+                        QtWidgets.QMessageBox.warning(dialog, "Proton no encontrado", "La ruta seleccionada no contiene un binario proton.")
+                        return
+                    proton_combo.addItem(f"Personalizado: {proton_path.parent.name}", str(proton_path))
+                    proton_combo.setCurrentIndex(proton_combo.count() - 1)
+
+                exe_btn.clicked.connect(browse_exe)
+                proton_btn.clicked.connect(browse_proton)
+                buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+                layout.addRow(buttons)
+                buttons.accepted.connect(dialog.accept)
+                buttons.rejected.connect(dialog.reject)
+                if dialog.exec() != QtWidgets.QDialog.Accepted:
+                    return
+                name = name_edit.text().strip()
+                exe = exe_edit.text().strip()
+                proton = proton_combo.currentData() or ""
+                if not name or not exe or not proton:
+                    QtWidgets.QMessageBox.warning(self, "Datos no validos", "Necesito nombre, ejecutable y Proton.")
+                    return
+                if not Path(exe).exists():
+                    QtWidgets.QMessageBox.warning(self, "Ejecutable no encontrado", "La ruta seleccionada no existe.")
+                    return
+                for entry in self.app_config.setdefault("external_games", []):
+                    if entry.get("id") == self.current_game["appid"]:
+                        entry["name"] = name
+                        entry["exe"] = exe
+                        entry["proton"] = proton
+                        break
+                save_app_config(self.app_config)
+                self.populate_games(self.current_game["appid"])
+                return
+
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Editar juego manual")
+            layout = QtWidgets.QFormLayout(dialog)
+            name_edit = QtWidgets.QLineEdit(self.current_game.get("name", ""))
+            appid_edit = QtWidgets.QLineEdit(self.current_game.get("appid", ""))
+            layout.addRow("Nombre:", name_edit)
+            layout.addRow("AppID Steam:", appid_edit)
+            buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+            layout.addRow(buttons)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            if dialog.exec() != QtWidgets.QDialog.Accepted:
+                return
+            name = name_edit.text().strip()
+            appid = appid_edit.text().strip()
+            if not name or not re.fullmatch(r"\d+", appid):
+                QtWidgets.QMessageBox.warning(self, "Datos no validos", "Necesito un nombre y un AppID numerico.")
+                return
+            old_appid = self.current_game["appid"]
+            for entry in self.app_config.setdefault("manual_games", []):
+                if str(entry.get("appid")) == old_appid:
+                    entry["name"] = name
+                    entry["appid"] = appid
+                    break
+            save_app_config(self.app_config)
+            self.populate_games(appid)
+
+        def remove_manual_game(self):
+            if not self.current_game or not self.current_game.get("manual"):
+                return
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Quitar juego manual",
+                f"Quitar este juego de Proton Pilot?\n\n{self.current_game['name']}\n\nNo borra archivos del juego ni desinstala nada.",
+            )
+            if reply != QtWidgets.QMessageBox.Yes:
+                return
+            appid = self.current_game["appid"]
+            if self.current_game.get("external"):
+                self.app_config["external_games"] = [
+                    entry for entry in self.app_config.setdefault("external_games", []) if entry.get("id") != appid
+                ]
+                self.app_config.setdefault("external_launch_options", {}).pop(appid, None)
+            else:
+                self.app_config["manual_games"] = [
+                    entry for entry in self.app_config.setdefault("manual_games", []) if str(entry.get("appid")) != appid
+                ]
+            self.app_config.setdefault("custom", {}).pop(appid, None)
+            self.app_config.setdefault("presets", {}).pop(appid, None)
+            save_app_config(self.app_config)
+            self.populate_games()
+
         def selected_keys(self):
             return [key for key, cb in self.checks.items() if cb.isChecked()]
 
@@ -2418,6 +2648,38 @@ def qt_main():
                     self.preset_combo.addItem(f"Juego: {name}", preset_ref("game", name))
             self.preset_combo.blockSignals(False)
 
+        def preset_command(self, preset):
+            if not preset:
+                return ""
+            if "options" in preset:
+                return compose_launch(
+                    preset.get("options", []),
+                    preset.get("custom_pre", ""),
+                    preset.get("custom_post", ""),
+                    preset.get("gamescope_res", {}),
+                )
+            return preset.get("command", "")
+
+        def matching_preset_ref(self, command):
+            wanted = normalize_command(command)
+            if not wanted:
+                return "", ""
+            for scope, presets in (("shared", self.shared_presets()), ("game", self.game_presets())):
+                for name, preset in presets.items():
+                    if normalize_command(self.preset_command(preset)) == wanted:
+                        return preset_ref(scope, name), name
+            return "", ""
+
+        def select_matching_preset(self, command):
+            ref, name = self.matching_preset_ref(command)
+            if ref:
+                index = self.preset_combo.findData(ref)
+                if index >= 0:
+                    self.preset_combo.setCurrentIndex(index)
+                self.current_preset_label.setText(f"Preset actual aplicado: {name}")
+            else:
+                self.current_preset_label.setText("Preset actual: no coincide con ningun preset guardado")
+
         def current_preset_payload(self):
             command = compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text(), self.gamescope_resolution())
             self.command_edit.setPlainText(command)
@@ -2455,6 +2717,7 @@ def qt_main():
             else:
                 command = preset.get("command", "")
                 self.command_edit.setPlainText(command)
+            self.current_preset_label.setText(f"Preset cargado en pantalla: {name}")
             QtWidgets.QMessageBox.information(
                 self,
                 "Preset cargado",
@@ -2573,11 +2836,6 @@ def qt_main():
                     subprocess.Popen([steam_cmd, "-applaunch", self.current_game["appid"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 else:
                     open_url(f"steam://run/{self.current_game['appid']}")
-                QtWidgets.QMessageBox.information(
-                    self,
-                    "Juego lanzado",
-                    f"Lanzando desde Steam:\n\n{self.current_game['name']}\n\nUsara las opciones que esten guardadas en Steam.",
-                )
                 return
             command = self.external_shell_command()
             if not command:
@@ -2589,11 +2847,6 @@ def qt_main():
             env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = str(self.root)
             env["STEAM_COMPAT_DATA_PATH"] = str(prefix)
             subprocess.Popen(command, shell=True, cwd=str(Path(self.current_game["exe"]).parent), env=env)
-            QtWidgets.QMessageBox.information(
-                self,
-                "Juego lanzado",
-                f"Lanzado con Proton:\n\n{self.current_game['name']}\n\nPrefijo:\n{prefix}",
-            )
 
         def apply_system_recommended(self):
             for key in self.system_recommended:
@@ -2635,7 +2888,8 @@ def qt_main():
                 "0.7.9 - VRR cap usa limitador MangoHud porque Gamescope redondea a divisores.\n"
                 "0.8.0 - Presets compartidos, controles sin rueda accidental, lanzamiento Steam y resumen ProtonDB oficial.\n"
                 "0.8.1 - Recomendadas amarillas, ratings ProtonDB en juegos y accesos directos Steam externos.\n"
-                "0.8.2 - Tarjetas HDR/VRR, badge ProtonDB y recomendaciones VRR/Adaptive en rojo de prueba.\n\n"
+                "0.8.2 - Tarjetas HDR/VRR, badge ProtonDB y recomendaciones VRR/Adaptive en rojo de prueba.\n"
+                "0.8.3 - Preset recomendado del sistema, panel de juego claro y gestion de manuales.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )

@@ -141,6 +141,30 @@ class ProtonPilotLogicTests(unittest.TestCase):
         self.assertTrue(proton_pilot.display_hdr_enabled(system["display"]))
         self.assertTrue(proton_pilot.display_vrr_available(system["display"]))
 
+    def test_system_preset_contains_detected_recommended_options(self):
+        system = {
+            "tools": {"gamemoderun": True, "mangohud": True, "gamescope": True},
+            "gamescope_wsi": True,
+            "session": {"type": "wayland"},
+            "display": {"width": 2560, "height": 1440, "refresh": 180, "hdr": "enabled", "vrr": "automatic"},
+            "device": {"is_handheld": False},
+            "gpu": "amd",
+        }
+        config = {}
+
+        proton_pilot.ensure_system_shared_preset(config, system)
+        preset = config["shared_presets"][proton_pilot.system_preset_name()]
+
+        self.assertIn("HDR", preset["options"])
+        self.assertIn("CAPVRR", preset["options"])
+        self.assertIn("MANGOHUD_CONFIG=fps_limit=177", preset["command"])
+        self.assertEqual(preset["gamescope_res"]["width"], 2560)
+
+    def test_clean_gpu_name_prefers_human_readable_bracket(self):
+        line = "03:00.0 VGA compatible controller: Advanced Micro Devices, Inc. [AMD/ATI] Navi 48 [Radeon RX 9070/9070 XT/9070 GRE] [1002:7550] (rev c0)"
+
+        self.assertEqual(proton_pilot.clean_gpu_name(line), "Radeon RX 9070/9070 XT/9070 GRE")
+
 
 if __name__ == "__main__":
     unittest.main()
