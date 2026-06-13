@@ -15,7 +15,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.7.4"
+APP_VERSION = "0.7.5"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -1598,7 +1598,7 @@ def qt_main():
             flags = detect_flags(current)
             for key, cb in self.checks.items():
                 cb.blockSignals(True)
-                cb.setChecked(flags.get(key, False) or OPTION_INFO[key]["recommended"])
+                cb.setChecked(flags.get(key, False))
                 cb.setProperty("active", "true" if flags.get(key, False) else "false")
                 cb.style().unpolish(cb)
                 cb.style().polish(cb)
@@ -1971,7 +1971,8 @@ def qt_main():
                 "0.7.1 - Layout de escritorio mas ancho, lista fija y opciones sin corte horizontal.\n"
                 "0.7.2 - Opciones en lista vertical, iconos de juegos, juegos manuales y botones de accion claros.\n"
                 "0.7.3 - Actualizar presets, confirmaciones, botones con borde y ejecutables externos con Proton detectable o manual.\n"
-                "0.7.4 - Ruta Steam configurable y guardado seguro cerrando/reabriendo Steam.\n\n"
+                "0.7.4 - Ruta Steam configurable y guardado seguro cerrando/reabriendo Steam.\n"
+                "0.7.5 - Las recomendaciones ya no se autoactivan al recargar un juego.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
