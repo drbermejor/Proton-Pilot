@@ -15,7 +15,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.7.6"
+APP_VERSION = "0.7.7"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -813,6 +813,15 @@ def detect_flags(current):
     }
 
 
+def detect_gamescope_resolution(current):
+    values = {}
+    for key, flag in (("width", "-w"), ("height", "-h"), ("refresh", "-r")):
+        match = re.search(rf"(?:^|\s){re.escape(flag)}\s+(\d+)(?:\s|$)", current)
+        if match:
+            values[key] = int(match.group(1))
+    return values
+
+
 def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
     selected = set(selected)
     gamescope_options = {"HDR", "GAMESCOPE", "REALRES", "ADAPTIVE", "HANDHELD800P", "HANDHELD1200P", "CAP60", "CAP72", "GSFSR", "GSNIS"}
@@ -1196,6 +1205,7 @@ def qt_main():
             self.games = merged_games(self.root, self.app_config)
             self.checks = {}
             self.current_game = None
+            self.active_gamescope_res = {"width": 0, "height": 0, "refresh": ""}
 
             self.setStyleSheet(
                 """
@@ -1450,15 +1460,17 @@ def qt_main():
             self.real_refresh = QtWidgets.QSpinBox()
             self.real_refresh.setRange(0, 1000)
             self.real_refresh.setSuffix(" Hz")
+            self.apply_resolution_btn = QtWidgets.QPushButton("Aplicar resolucion")
+            self.apply_resolution_btn.setToolTip("Usa los valores de ancho/alto/Hz en el comando Gamescope y activa Resolucion real Gamescope.")
             self.detect_display_btn = QtWidgets.QPushButton("Usar monitor principal")
-            for widget in (self.real_width, self.real_height, self.real_refresh):
-                widget.valueChanged.connect(self.update_command)
+            self.detect_display_btn.setToolTip("Detecta el monitor principal, rellena la resolucion y la aplica al comando Gamescope.")
             res_layout.addWidget(QtWidgets.QLabel("Ancho"))
             res_layout.addWidget(self.real_width)
             res_layout.addWidget(QtWidgets.QLabel("Alto"))
             res_layout.addWidget(self.real_height)
             res_layout.addWidget(QtWidgets.QLabel("Hz"))
             res_layout.addWidget(self.real_refresh)
+            res_layout.addWidget(self.apply_resolution_btn)
             res_layout.addWidget(self.detect_display_btn)
             right.addWidget(res_box)
 
@@ -1502,6 +1514,7 @@ def qt_main():
             self.apply_system_btn.clicked.connect(self.apply_system_recommended)
             self.launch_btn.clicked.connect(self.launch_current_game)
             self.about_btn.clicked.connect(self.show_about)
+            self.apply_resolution_btn.clicked.connect(self.apply_resolution_fields)
             self.detect_display_btn.clicked.connect(self.use_detected_display)
             self.apply_preset_btn.clicked.connect(self.apply_preset)
             self.save_preset_btn.clicked.connect(self.save_preset)
@@ -1613,7 +1626,12 @@ def qt_main():
             self.custom_post.setText(custom.get("post", ""))
             self.custom_pre.blockSignals(False)
             self.custom_post.blockSignals(False)
-            res = custom.get("gamescope_res") or self.system.get("display", {})
+            res = detect_gamescope_resolution(current) if flags.get("REALRES") else custom.get("gamescope_res", {})
+            self.active_gamescope_res = {
+                "width": int(res.get("width") or 0),
+                "height": int(res.get("height") or 0),
+                "refresh": int(res.get("refresh") or 0) or "",
+            }
             self.set_resolution_fields(res)
             self.refresh_presets()
             self.update_command()
@@ -1773,11 +1791,7 @@ def qt_main():
             self.command_edit.setPlainText(command)
 
         def gamescope_resolution(self):
-            return {
-                "width": self.real_width.value(),
-                "height": self.real_height.value(),
-                "refresh": self.real_refresh.value() or "",
-            }
+            return dict(self.active_gamescope_res)
 
         def set_resolution_fields(self, res):
             for widget in (self.real_width, self.real_height, self.real_refresh):
@@ -1788,12 +1802,23 @@ def qt_main():
             for widget in (self.real_width, self.real_height, self.real_refresh):
                 widget.blockSignals(False)
 
-        def use_detected_display(self):
-            display = detect_primary_display()
-            self.set_resolution_fields(display)
+        def resolution_fields(self):
+            return {
+                "width": self.real_width.value(),
+                "height": self.real_height.value(),
+                "refresh": self.real_refresh.value() or "",
+            }
+
+        def apply_resolution_fields(self):
+            self.active_gamescope_res = self.resolution_fields()
             self.checks["REALRES"].setChecked(True)
             self.show_option_detail("REALRES")
             self.update_command()
+
+        def use_detected_display(self):
+            display = detect_primary_display()
+            self.set_resolution_fields(display)
+            self.apply_resolution_fields()
 
         def game_presets(self):
             if not self.current_game:
@@ -1836,7 +1861,13 @@ def qt_main():
                 cb.blockSignals(False)
             self.custom_pre.setText(preset.get("custom_pre", ""))
             self.custom_post.setText(preset.get("custom_post", ""))
-            self.set_resolution_fields(preset.get("gamescope_res") or self.system.get("display", {}))
+            preset_res = preset.get("gamescope_res") or {}
+            self.active_gamescope_res = {
+                "width": int(preset_res.get("width") or 0),
+                "height": int(preset_res.get("height") or 0),
+                "refresh": int(preset_res.get("refresh") or 0) or "",
+            }
+            self.set_resolution_fields(preset_res)
             if "options" in preset:
                 self.update_command()
             else:
@@ -1982,7 +2013,8 @@ def qt_main():
                 "0.7.3 - Actualizar presets, confirmaciones, botones con borde y ejecutables externos con Proton detectable o manual.\n"
                 "0.7.4 - Ruta Steam configurable y guardado seguro cerrando/reabriendo Steam.\n"
                 "0.7.5 - Las recomendaciones ya no se autoactivan al recargar un juego.\n"
-                "0.7.6 - Presets aplican opciones reconstruidas y recuerdan acciones como HDR Unreal.\n\n"
+                "0.7.6 - Presets aplican opciones reconstruidas y recuerdan acciones como HDR Unreal.\n"
+                "0.7.7 - Resolucion Gamescope solo cambia al aplicarla y pruebas de presets.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )

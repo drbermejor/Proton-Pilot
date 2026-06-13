@@ -1,0 +1,71 @@
+import importlib.util
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location("proton_pilot", ROOT / "proton-pilot.py")
+proton_pilot = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(proton_pilot)
+
+
+class ProtonPilotLogicTests(unittest.TestCase):
+    def test_compose_does_not_add_mangohud_when_unselected(self):
+        command = proton_pilot.compose_launch(
+            ["GAMEMODE", "HDR", "WAYLAND", "PROTONHDR", "FSR4", "GAMESCOPE", "REALRES", "ADAPTIVE", "UEHDR"],
+            "",
+            "",
+            {"width": 2560, "height": 1440, "refresh": 180},
+        )
+
+        self.assertIn("gamemoderun %command%", command)
+        self.assertIn("--hdr-enabled", command)
+        self.assertIn("-W 2560 -H 1440 -w 2560 -h 1440 -r 180", command)
+        self.assertNotIn("--mangoapp", command)
+        self.assertNotIn("mangohud", command)
+
+    def test_unreal_hdr_is_side_effect_only(self):
+        command = proton_pilot.compose_launch(["UEHDR"], "", "", {})
+
+        self.assertEqual(command, "%command%")
+        self.assertIn("UEHDR", proton_pilot.SIDE_EFFECT_OPTIONS)
+
+    def test_detect_gamescope_resolution(self):
+        command = "gamescope -f --force-windows-fullscreen -W 2560 -H 1440 -w 2560 -h 1440 -r 180 -- %command%"
+
+        self.assertEqual(
+            proton_pilot.detect_gamescope_resolution(command),
+            {"width": 2560, "height": 1440, "refresh": 180},
+        )
+
+    def test_detect_flags_do_not_infer_recommended_options(self):
+        command = "ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f --hdr-enabled -- %command%"
+        flags = proton_pilot.detect_flags(command)
+
+        self.assertTrue(flags["HDR"])
+        self.assertFalse(flags["MANGOHUD"])
+        self.assertFalse(flags["GAMEMODE"])
+
+    def test_builtin_presets_rebuild_to_expected_features(self):
+        config = {}
+        proton_pilot.ensure_builtin_presets(config)
+        proton_pilot.ensure_game_builtin_presets(config, "1172710")
+        proton_pilot.ensure_display_preset(config, "1172710", {"width": 2560, "height": 1440, "refresh": 180})
+
+        for name, preset in config["presets"]["1172710"].items():
+            with self.subTest(preset=name):
+                rebuilt = proton_pilot.compose_launch(
+                    preset.get("options", []),
+                    preset.get("custom_pre", ""),
+                    preset.get("custom_post", ""),
+                    preset.get("gamescope_res", {}),
+                )
+                options = set(preset.get("options", []))
+                self.assertIn("%command%", rebuilt)
+                self.assertEqual("--mangoapp" in rebuilt or "mangohud" in rebuilt, "MANGOHUD" in options)
+                self.assertEqual("gamemoderun" in rebuilt, "GAMEMODE" in options)
+                self.assertEqual("PROTON_FSR4_UPGRADE=1" in rebuilt, "FSR4" in options)
+
+
+if __name__ == "__main__":
+    unittest.main()
