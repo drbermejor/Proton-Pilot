@@ -15,7 +15,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.7.5"
+APP_VERSION = "0.7.6"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -51,6 +51,8 @@ PRESETS = {
     "RECOMMEND": "Ver recomendaciones ProtonDB",
     "CUSTOM": "Ajustes personalizados",
 }
+
+SIDE_EFFECT_OPTIONS = {"UEHDR"}
 
 HIDDEN_APP_NAMES = (
     "Proton ",
@@ -1596,14 +1598,15 @@ def qt_main():
             )
             self.set_action_availability()
             flags = detect_flags(current)
+            custom = self.app_config.setdefault("custom", {}).get(self.current_game["appid"], {})
+            saved_side_effects = set(custom.get("side_effect_options", []))
             for key, cb in self.checks.items():
                 cb.blockSignals(True)
-                cb.setChecked(flags.get(key, False))
+                cb.setChecked(flags.get(key, False) or key in saved_side_effects)
                 cb.setProperty("active", "true" if flags.get(key, False) else "false")
                 cb.style().unpolish(cb)
                 cb.style().polish(cb)
                 cb.blockSignals(False)
-            custom = self.app_config.setdefault("custom", {}).get(self.current_game["appid"], {})
             self.custom_pre.blockSignals(True)
             self.custom_post.blockSignals(True)
             self.custom_pre.setText(custom.get("pre", ""))
@@ -1809,12 +1812,14 @@ def qt_main():
             self.preset_combo.blockSignals(False)
 
         def current_preset_payload(self):
+            command = compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text(), self.gamescope_resolution())
+            self.command_edit.setPlainText(command)
             return {
                 "options": self.selected_keys(),
                 "custom_pre": self.custom_pre.text(),
                 "custom_post": self.custom_post.text(),
                 "gamescope_res": self.gamescope_resolution(),
-                "command": self.command_edit.toPlainText().strip(),
+                "command": command,
             }
 
         def apply_preset(self):
@@ -1826,12 +1831,16 @@ def qt_main():
                 return
             selected = set(preset.get("options", []))
             for key, cb in self.checks.items():
+                cb.blockSignals(True)
                 cb.setChecked(key in selected)
+                cb.blockSignals(False)
             self.custom_pre.setText(preset.get("custom_pre", ""))
             self.custom_post.setText(preset.get("custom_post", ""))
             self.set_resolution_fields(preset.get("gamescope_res") or self.system.get("display", {}))
-            command = preset.get("command", "")
-            if command:
+            if "options" in preset:
+                self.update_command()
+            else:
+                command = preset.get("command", "")
                 self.command_edit.setPlainText(command)
             QtWidgets.QMessageBox.information(
                 self,
@@ -1972,7 +1981,8 @@ def qt_main():
                 "0.7.2 - Opciones en lista vertical, iconos de juegos, juegos manuales y botones de accion claros.\n"
                 "0.7.3 - Actualizar presets, confirmaciones, botones con borde y ejecutables externos con Proton detectable o manual.\n"
                 "0.7.4 - Ruta Steam configurable y guardado seguro cerrando/reabriendo Steam.\n"
-                "0.7.5 - Las recomendaciones ya no se autoactivan al recargar un juego.\n\n"
+                "0.7.5 - Las recomendaciones ya no se autoactivan al recargar un juego.\n"
+                "0.7.6 - Presets aplican opciones reconstruidas y recuerdan acciones como HDR Unreal.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
@@ -2024,6 +2034,7 @@ def qt_main():
             custom["pre"] = self.custom_pre.text()
             custom["post"] = self.custom_post.text()
             custom["gamescope_res"] = self.gamescope_resolution()
+            custom["side_effect_options"] = [key for key in self.selected_keys() if key in SIDE_EFFECT_OPTIONS]
             save_app_config(self.app_config)
 
         def save(self):
