@@ -46,6 +46,22 @@ class ProtonPilotLogicTests(unittest.TestCase):
         self.assertFalse(flags["MANGOHUD"])
         self.assertFalse(flags["GAMEMODE"])
 
+    def test_vrr_cap_uses_refresh_minus_margin(self):
+        command = proton_pilot.compose_launch(
+            ["GAMESCOPE", "ADAPTIVE", "CAPVRR"],
+            "",
+            "",
+            {"refresh": 180},
+        )
+
+        self.assertIn("--adaptive-sync", command)
+        self.assertIn("--framerate-limit 177", command)
+
+    def test_vrr_cap_detection_does_not_confuse_fixed_caps(self):
+        self.assertTrue(proton_pilot.detect_flags("gamescope -f --framerate-limit 177 -- %command%")["CAPVRR"])
+        self.assertFalse(proton_pilot.detect_flags("gamescope -f --framerate-limit 72 -- %command%")["CAPVRR"])
+        self.assertFalse(proton_pilot.detect_flags("gamescope -f --framerate-limit 60 -- %command%")["CAPVRR"])
+
     def test_builtin_presets_rebuild_to_expected_features(self):
         config = {}
         proton_pilot.ensure_builtin_presets(config)

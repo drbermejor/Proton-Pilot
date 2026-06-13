@@ -15,7 +15,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.7.7"
+APP_VERSION = "0.7.8"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -45,6 +45,7 @@ PRESETS = {
     "MANGOHUD": "MangoHud",
     "GAMESCOPE": "Gamescope fullscreen",
     "ADAPTIVE": "Adaptive Sync",
+    "CAPVRR": "VRR cap automatico",
     "UEHDR": "Forzar HDR Unreal Engine.ini",
     "NODXR": "Desactivar Ray Tracing DXR",
     "PROTONDB": "Abrir ProtonDB del juego",
@@ -157,6 +158,12 @@ OPTION_INFO = {
         "label": "Limite 72 FPS",
         "description": "Anade limite simple de 72 FPS en Gamescope. Encaja bien con pantallas de 144 Hz al dividir por dos.",
         "tokens": "gamescope --framerate-limit 72",
+        "recommended": False,
+    },
+    "CAPVRR": {
+        "label": "VRR cap automatico",
+        "description": "Limita FPS unos pocos frames por debajo de los Hz aplicados para evitar tocar el techo VRR. Ejemplo: 180 Hz genera 177 FPS.",
+        "tokens": "gamescope --framerate-limit <Hz-3>",
         "recommended": False,
     },
     "GSFSR": {
@@ -785,6 +792,7 @@ def set_launch_options(config_path, appid, launch_options):
 
 
 def detect_flags(current):
+    framerate_limit = detect_framerate_limit(current)
     return {
         "HDR": "--hdr-enabled" in current or "DXVK_HDR=1" in current,
         "WAYLAND": "PROTON_ENABLE_WAYLAND=1" in current,
@@ -802,6 +810,7 @@ def detect_flags(current):
         "HANDHELD1200P": "-w 1920" in current and "-h 1200" in current,
         "CAP60": "--framerate-limit 60" in current,
         "CAP72": "--framerate-limit 72" in current,
+        "CAPVRR": bool(framerate_limit and framerate_limit not in {60, 72}),
         "GSFSR": "-F fsr" in current,
         "GSNIS": "-F nis" in current,
         "ADAPTIVE": "--adaptive-sync" in current,
@@ -822,9 +831,22 @@ def detect_gamescope_resolution(current):
     return values
 
 
+def detect_framerate_limit(current):
+    match = re.search(r"(?:^|\s)--framerate-limit\s+(\d+)(?:\s|$)", current)
+    return int(match.group(1)) if match else 0
+
+
+def vrr_cap_from_refresh(refresh, margin=3):
+    try:
+        refresh = int(refresh or 0)
+    except (TypeError, ValueError):
+        return 0
+    return max(30, refresh - margin) if refresh else 0
+
+
 def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
     selected = set(selected)
-    gamescope_options = {"HDR", "GAMESCOPE", "REALRES", "ADAPTIVE", "HANDHELD800P", "HANDHELD1200P", "CAP60", "CAP72", "GSFSR", "GSNIS"}
+    gamescope_options = {"HDR", "GAMESCOPE", "REALRES", "ADAPTIVE", "HANDHELD800P", "HANDHELD1200P", "CAP60", "CAP72", "CAPVRR", "GSFSR", "GSNIS"}
     use_gamescope = bool(gamescope_options & selected)
     parts = []
     post_args = []
@@ -868,6 +890,10 @@ def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
             flags.extend(["--framerate-limit", "72"])
         elif "CAP60" in selected:
             flags.extend(["--framerate-limit", "60"])
+        elif "CAPVRR" in selected:
+            vrr_cap = vrr_cap_from_refresh((gamescope_res or {}).get("refresh"))
+            if vrr_cap:
+                flags.extend(["--framerate-limit", str(vrr_cap)])
         if "GSFSR" in selected:
             flags.extend(["-F", "fsr", "--sharpness", "5"])
         elif "GSNIS" in selected:
