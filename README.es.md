@@ -5,6 +5,8 @@ lanzamiento de Steam/Proton por juego. Ayuda a configurar Gamescope, GameMode,
 MangoHud, HDR, VRR, versiones de Proton, informacion de ProtonDB, perfiles
 handheld y opciones de lanzamiento personalizadas.
 
+Version actual: 0.10.5
+
 ## Instalacion
 
 ```bash
@@ -54,6 +56,8 @@ El resultado se crea en `dist/`.
 - Guarda presets y configuracion en `~/.config/proton-pilot/config.json`.
 - Incluye modo compacto, modo solo lectura y preferencia persistente de idioma
   entre español e ingles.
+- La interfaz puede alternar entre español e ingles y cubre paneles, botones,
+  tooltips, descripciones de opciones, diagnosticos y dialogos habituales.
 
 ## Escritura Segura En Steam
 
@@ -73,4 +77,3 @@ interfaz handheld pensada para mando queda documentada como trabajo futuro.
 Las versiones estables se publican en GitHub Releases como AppImage:
 
 https://github.com/drbermejor/Proton-Pilot/releases
-

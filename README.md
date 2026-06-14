@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.10.4
+Version: 0.10.5
 
 Documentation:
 
@@ -53,6 +53,8 @@ tocar `localconfig.vdf`.
   and Gaming Mode/Desktop Mode.
 - Provides a compact mode for smaller screens and a read-only mode for safe
   inspection without writing launch options or presets.
+- Provides a persistent English/Spanish language toggle covering the main
+  interface, option descriptions, tooltips, status panels, and common dialogs.
 - Detects Bazzite, SteamOS-style sessions, Lenovo Legion Go devices, and handheld-friendly setups.
 - Detects the primary monitor resolution and can force Gamescope to expose the real physical resolution to the game.
 - Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
@@ -608,3 +610,6 @@ support or game-specific configuration.
 - 0.10.4: Replaces option group boxes with a cleaner accordion that remembers
   expanded sections, adds an English/Spanish language toggle with persistent
   preference, and adds separate English and Spanish documentation files.
+- 0.10.5: Expands the English/Spanish language coverage across the main UI,
+  launch-option descriptions, tooltips, status panels, Proton controls,
+  preset flows, diagnostics, recommendations, and common confirmation dialogs.

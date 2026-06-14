@@ -4,6 +4,8 @@ Proton Pilot is a Linux desktop app for managing Steam/Proton launch profiles pe
 game. It helps configure Gamescope, GameMode, MangoHud, HDR, VRR, Proton
 versions, ProtonDB information, handheld presets, and custom launch options.
 
+Current version: 0.10.5
+
 ## Install
 
 ```bash
@@ -52,6 +54,8 @@ The output is created in `dist/`.
 - Stores presets and app configuration in `~/.config/proton-pilot/config.json`.
 - Offers compact mode, read-only mode, and a persistent English/Spanish language
   preference.
+- The interface can switch between English and Spanish across panels, buttons,
+  tooltips, option descriptions, diagnostics, and common dialogs.
 
 ## Safe Steam Writes
 
@@ -71,4 +75,3 @@ A controller-first handheld UI is planned separately.
 Stable builds are published in GitHub Releases as AppImages:
 
 https://github.com/drbermejor/Proton-Pilot/releases
-
