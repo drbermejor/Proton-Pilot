@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.8.6
+Version: 0.8.7
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -33,6 +33,8 @@ tocar `localconfig.vdf`.
 - Lets you add an external Windows executable as a local Proton Pilot profile and launch it with an installed Proton build.
 - Can also add external executable profiles to Steam's non-Steam shortcut library.
 - Lets you edit or remove manually added games, with confirmation before removal.
+- Extracts external executable icons when `icoutils` is available, so manual
+  Proton profiles can look closer to their launcher/menu icon.
 - Lets you choose and persist a custom Steam root path if automatic detection misses it.
 - Reads and writes Steam launch options in `localconfig.vdf`.
 - Creates a backup before writing changes.
@@ -43,6 +45,7 @@ tocar `localconfig.vdf`.
 - Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
 - Provides an automatic shared `Recomendado del sistema` preset based on detected hardware and session.
 - Lets you create, load, update, and delete your own shared presets.
+- Lets you save a manually edited final command as a per-game custom preset.
 - Shows ProtonDB official summary data, colored ratings, and community launch hints when available.
 - Opens the selected game's ProtonDB page.
 - Can apply Unreal Engine HDR config tweaks for games that need them.
@@ -102,6 +105,8 @@ Optional tools detected and used by presets:
 - `gamemoderun`
 - `mangohud`
 - `xdg-open`
+- `icoutils` (`wrestool` and `icotool`) for extracting icons from external
+  Windows executables
 
 The installer supports dependency installation through:
 
@@ -114,7 +119,7 @@ The installer supports dependency installation through:
 On Arch/CachyOS:
 
 ```bash
-sudo pacman -S python-pyside6 python-vdf gamescope gamemode mangohud
+sudo pacman -S python-pyside6 python-vdf icoutils gamescope gamemode mangohud
 ```
 
 On Bazzite / Fedora Atomic-style systems, first check whether PySide6 is already
@@ -226,8 +231,12 @@ you to open Steam manually.
 
 - The game list keeps a compact width and uses a horizontal scrollbar for long names.
 - Steam library icons are shown when they exist in Steam's local cache.
+- External executable icons are extracted from the `.exe` when `icoutils` is
+  installed; otherwise Proton Pilot falls back to the generic icon.
 - Launch options are displayed as a vertical list so each option is easier to scan.
-- `Guardar opciones` is highlighted in green.
+- `Guardar comando manual` is highlighted in green. It is meant for cases where
+  you edit the `Comando final` text directly; Proton Pilot will offer to create
+  a per-game custom preset for that exact command.
 - `Borrar opciones` is highlighted in red and asks for confirmation before clearing
   the saved Steam launch options for the selected game.
 - The selected game panel shows the currently saved launch command and whether it
@@ -298,7 +307,8 @@ and can be loaded for any game.
 
 Yellow launch options are recommended or important for the detected system.
 `Marcar recomendadas` enables those detected recommendations in the UI, but it
-does not write anything to Steam until `Guardar opciones` is pressed.
+does not write anything to Steam until you create/update/apply a preset or save a
+manual command.
 Red launch options are useful but experimental or game-sensitive; Proton Pilot
 may still recommend them when the system supports them, but they should be
 validated per game.
@@ -375,3 +385,5 @@ support or game-specific configuration.
   for confirmation.
 - 0.8.6: Stores the exact applied preset per game and shows a red pending state
   when the selected preset differs from the saved/applied one.
+- 0.8.7: Extracts icons for external executables when `icoutils` is available
+  and clarifies manual command saving by creating per-game custom presets.

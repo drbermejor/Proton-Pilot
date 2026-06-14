@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.6"
+APP_VERSION = "0.8.7"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -24,6 +24,7 @@ APP_ICON_CANDIDATES = [
 ]
 APP_CONFIG_DIR = HOME / ".config/proton-pilot"
 APP_CONFIG_FILE = APP_CONFIG_DIR / "config.json"
+APP_CACHE_DIR = APP_CONFIG_DIR / "cache"
 LEGACY_CONFIG_FILE = HOME / ".config/steam-game-options/config.json"
 STEAM_ROOTS = [
     HOME / ".local/share/Steam",
@@ -796,6 +797,60 @@ def find_game_icon(root, appid):
         if images:
             return images[0]
     return None
+
+
+def external_icon_cache_path(exe):
+    digest = hashlib.sha1(str(exe).encode("utf-8", "replace")).hexdigest()[:16]
+    return APP_CACHE_DIR / "icons" / f"{digest}.png"
+
+
+def find_external_icon(exe):
+    exe_path = Path(exe)
+    cached = external_icon_cache_path(exe_path)
+    if cached.exists():
+        return cached
+    wrestool = shutil.which("wrestool")
+    icotool = shutil.which("icotool")
+    if not exe_path.exists() or not wrestool or not icotool:
+        return None
+    icon_dir = cached.parent / (cached.stem + ".extract")
+    ico_path = icon_dir / "resources.ico"
+    try:
+        icon_dir.mkdir(parents=True, exist_ok=True)
+        with ico_path.open("wb") as handle:
+            proc = subprocess.run(
+                [wrestool, "-x", "-t", "14", str(exe_path)],
+                stdout=handle,
+                stderr=subprocess.DEVNULL,
+                timeout=8,
+            )
+        if proc.returncode != 0 or not ico_path.exists() or ico_path.stat().st_size == 0:
+            return None
+        subprocess.run([icotool, "-x", "-o", str(icon_dir), str(ico_path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+        images = sorted(
+            [p for p in icon_dir.iterdir() if p.suffix.lower() in {".png", ".ico", ".bmp"} and p.name != ico_path.name],
+            key=lambda p: p.stat().st_size,
+            reverse=True,
+        )
+        if not images:
+            return None
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        source = images[0]
+        if source.suffix.lower() == ".png":
+            shutil.copy2(source, cached)
+        elif shutil.which("magick"):
+            subprocess.run(["magick", str(source), str(cached)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+        elif shutil.which("convert"):
+            subprocess.run(["convert", str(source), str(cached)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+        return cached if cached.exists() else None
+    except Exception:
+        return None
+
+
+def game_icon(root, game):
+    if game.get("external"):
+        return find_external_icon(game.get("exe", ""))
+    return find_game_icon(root, game["appid"])
 
 
 def external_game_id(name, exe):
@@ -1837,7 +1892,7 @@ def qt_main():
                 summary = self.cached_game_summary(game["appid"])
                 item = QtWidgets.QListWidgetItem(self.game_label(game, summary))
                 item.setData(QtCore.Qt.UserRole, game)
-                icon_path = find_game_icon(self.root, game["appid"])
+                icon_path = game_icon(self.root, game)
                 if icon_path:
                     item.setIcon(QtGui.QIcon(str(icon_path)))
                 self.style_game_item(item, summary)
@@ -1922,7 +1977,7 @@ def qt_main():
             self.recommend_btn = QtWidgets.QPushButton("Recomendaciones")
             self.open_protondb_btn = QtWidgets.QPushButton("Abrir ProtonDB")
             self.apply_system_btn = QtWidgets.QPushButton("Marcar recomendadas")
-            self.apply_system_btn.setToolTip("Marca las opciones amarillas recomendadas segun tu sistema detectado. No guarda nada en Steam hasta pulsar Guardar opciones.")
+            self.apply_system_btn.setToolTip("Marca las opciones amarillas recomendadas segun tu sistema detectado. Para escribirlas en el juego, aplica un preset o guarda un comando.")
             self.about_btn = QtWidgets.QPushButton("Acerca de")
             action_layout.addWidget(self.recommend_btn)
             action_layout.addWidget(self.open_protondb_btn)
@@ -2041,8 +2096,9 @@ def qt_main():
 
             buttons = QtWidgets.QHBoxLayout()
             layout.addLayout(buttons)
-            self.save_btn = QtWidgets.QPushButton("Guardar opciones")
+            self.save_btn = QtWidgets.QPushButton("Guardar comando manual")
             self.save_btn.setObjectName("saveButton")
+            self.save_btn.setToolTip("Pensado para cuando editas a mano el Comando final. Crea un preset custom del juego y guarda exactamente ese comando.")
             self.clear_btn = QtWidgets.QPushButton("Borrar opciones")
             self.clear_btn.setObjectName("clearButton")
             self.reload_btn = QtWidgets.QPushButton("Recargar")
@@ -2192,7 +2248,7 @@ def qt_main():
                 label = self.game_label(game, summary)
                 item = QtWidgets.QListWidgetItem(label)
                 item.setData(QtCore.Qt.UserRole, game)
-                icon_path = find_game_icon(self.root, game["appid"])
+                icon_path = game_icon(self.root, game)
                 if icon_path:
                     item.setIcon(QtGui.QIcon(str(icon_path)))
                 self.style_game_item(item, summary)
@@ -2721,6 +2777,73 @@ def qt_main():
                 "command": command,
             }
 
+        def generated_command_from_controls(self):
+            return compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text(), self.gamescope_resolution())
+
+        def command_was_edited_manually(self, command):
+            return normalize_command(command) != normalize_command(self.generated_command_from_controls())
+
+        def maybe_create_manual_command_preset(self, command):
+            if not self.current_game or not self.command_was_edited_manually(command):
+                return ""
+            default_name = "Custom manual " + _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+            name, ok = QtWidgets.QInputDialog.getText(
+                self,
+                "Crear preset custom",
+                "El Comando final fue editado a mano. Nombre para guardar este preset custom:",
+                text=default_name,
+            )
+            name = name.strip()
+            if not ok or not name:
+                return None
+            presets = self.game_presets()
+            if name in presets:
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Sobreescribir preset custom",
+                    f"Ya existe un preset del juego llamado:\n\n{name}\n\nSobreescribirlo con el comando actual?",
+                )
+                if reply != QtWidgets.QMessageBox.Yes:
+                    return None
+            presets[name] = {
+                "custom_pre": "",
+                "custom_post": "",
+                "gamescope_res": self.gamescope_resolution(),
+                "command": command,
+                "manual_command": True,
+            }
+            ref = preset_ref("game", name)
+            custom = self.app_config.setdefault("custom", {}).setdefault(self.current_game["appid"], {})
+            custom["applied_preset_ref"] = ref
+            save_app_config(self.app_config)
+            self.refresh_presets()
+            index = self.preset_combo.findData(ref)
+            if index >= 0:
+                self.preset_combo.blockSignals(True)
+                self.preset_combo.setCurrentIndex(index)
+                self.preset_combo.blockSignals(False)
+            self.current_applied_preset_ref = ref
+            self.set_preset_status(f"Preset custom aplicado: {name}", pending=False)
+            return name
+
+        def confirm_manual_command_save(self, command, external=False):
+            target = "perfil local de Proton Pilot" if external else "opciones de lanzamiento en Steam"
+            if self.command_was_edited_manually(command):
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Guardar comando manual",
+                    f"Guardar el Comando final editado a mano como preset custom y escribirlo en {target}?\n\n{self.current_game['name']}",
+                )
+                return reply == QtWidgets.QMessageBox.Yes
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Comando generado por controles",
+                "El Comando final coincide con las casillas y campos de Proton Pilot.\n\n"
+                "Este boton esta pensado para comandos escritos a mano. Para un perfil normal suele ser mas claro usar Crear nuevo preset, Actualizar preset o Aplicar preset.\n\n"
+                f"Guardar este comando igualmente en {target}?",
+            )
+            return reply == QtWidgets.QMessageBox.Yes
+
         def load_selected_preset(self):
             ref = self.preset_combo.currentData()
             if not ref:
@@ -2913,7 +3036,7 @@ def qt_main():
             QtWidgets.QMessageBox.information(
                 self,
                 "Recomendadas marcadas",
-                "He marcado las opciones amarillas recomendadas segun tu sistema detectado. Revisa el comando final y pulsa Guardar opciones para escribirlo.",
+                "He marcado las opciones amarillas recomendadas segun tu sistema detectado. Revisa el comando final y usa Crear/Actualizar preset o Aplicar preset para escribirlo.",
             )
 
         def show_about(self):
@@ -2944,7 +3067,8 @@ def qt_main():
                 "0.8.3 - Preset recomendado del sistema, panel de juego claro y gestion de manuales.\n"
                 "0.8.4 - Corrige listado inicial para mostrar todos los juegos detectados.\n"
                 "0.8.5 - Selector de presets carga opciones automaticamente y aplicar pide confirmacion.\n"
-                "0.8.6 - Recuerda el preset exacto aplicado y avisa en rojo si hay uno pendiente.\n\n"
+                "0.8.6 - Recuerda el preset exacto aplicado y avisa en rojo si hay uno pendiente.\n"
+                "0.8.7 - Iconos para ejecutables externos y comandos manuales guardados como presets custom.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
@@ -3011,13 +3135,11 @@ def qt_main():
             if self.current_game.get("external"):
                 command = self.command_edit.toPlainText().strip()
                 if confirm:
-                    reply = QtWidgets.QMessageBox.question(
-                        self,
-                        "Guardar opciones",
-                        f"Guardar estas opciones en el perfil local de Proton Pilot?\n\n{self.current_game['name']}",
-                    )
-                    if reply != QtWidgets.QMessageBox.Yes:
+                    if not self.confirm_manual_command_save(command, external=True):
                         return
+                custom_preset_name = self.maybe_create_manual_command_preset(command) if confirm else ""
+                if custom_preset_name is None:
+                    return
                 self.app_config.setdefault("external_launch_options", {})[self.current_game["appid"]] = command
                 self.save_custom()
                 shortcut_note = ""
@@ -3059,22 +3181,22 @@ def qt_main():
                             shortcut_note += "\nSteam se ha vuelto a abrir."
                         else:
                             shortcut_note += "\nNo he podido volver a abrir Steam; abrelo manualmente."
+                custom_note = f"\n\nPreset custom creado: {custom_preset_name}" if custom_preset_name else ""
                 QtWidgets.QMessageBox.information(
                     self,
                     "Guardado",
-                    f"Opciones guardadas para el perfil externo:\n\n{self.current_game['name']}{shortcut_note}",
+                    f"Comando guardado para el perfil externo:\n\n{self.current_game['name']}"
+                    f"{custom_note}{shortcut_note}",
                 )
                 self.select_game(self.game_list.currentItem())
                 return
             command = self.command_edit.toPlainText().strip()
             if confirm:
-                reply = QtWidgets.QMessageBox.question(
-                    self,
-                    "Guardar opciones",
-                    f"Guardar estas opciones de lanzamiento en Steam?\n\n{self.current_game['name']}",
-                )
-                if reply != QtWidgets.QMessageBox.Yes:
+                if not self.confirm_manual_command_save(command, external=False):
                     return
+            custom_preset_name = self.maybe_create_manual_command_preset(command) if confirm else ""
+            if custom_preset_name is None:
+                return
             reopen_steam = False
             if steam_is_running():
                 reply = QtWidgets.QMessageBox.question(
@@ -3103,10 +3225,12 @@ def qt_main():
                     reopen_note = "\n\nSteam se ha vuelto a abrir."
                 else:
                     reopen_note = "\n\nNo he podido volver a abrir Steam. Abre Steam manualmente."
+            custom_note = f"\n\nPreset custom creado: {custom_preset_name}" if custom_preset_name else ""
             QtWidgets.QMessageBox.information(
                 self,
                 "Guardado",
-                f"Opciones guardadas para {self.current_game['name']}.\n\nBackup:\n{backup}{extra}{reopen_note}",
+                f"Comando guardado para {self.current_game['name']}.\n\nBackup:\n{backup}"
+                f"{custom_note}{extra}{reopen_note}",
             )
             self.select_game(self.game_list.currentItem())
 

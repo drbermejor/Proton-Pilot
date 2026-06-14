@@ -53,6 +53,9 @@ missing_runtime_tools() {
   need_cmd python3 || missing+=("python3")
   python_has_pyside6 || missing+=("PySide6")
   python_has_vdf || missing+=("python-vdf")
+  if ! need_cmd wrestool || ! need_cmd icotool; then
+    missing+=("icoutils")
+  fi
   need_cmd gamescope || missing+=("gamescope")
   need_cmd gamemoderun || missing+=("gamemode")
   need_cmd mangohud || missing+=("mangohud")
@@ -74,26 +77,26 @@ confirm() {
 }
 
 install_with_pacman() {
-  sudo pacman -S --needed python python-pyside6 python-vdf gamescope gamemode mangohud xdg-utils
+  sudo pacman -S --needed python python-pyside6 python-vdf icoutils gamescope gamemode mangohud xdg-utils
 }
 
 install_with_dnf() {
-  sudo dnf install -y python3 python3-pyside6 python3-vdf gamescope gamemode mangohud xdg-utils
+  sudo dnf install -y python3 python3-pyside6 python3-vdf icoutils gamescope gamemode mangohud xdg-utils
 }
 
 install_with_rpm_ostree() {
-  sudo rpm-ostree install python3-pyside6 python3-vdf gamescope gamemode mangohud xdg-utils
+  sudo rpm-ostree install python3-pyside6 python3-vdf icoutils gamescope gamemode mangohud xdg-utils
   echo
   echo "rpm-ostree installed packages. Reboot may be required before all dependencies are available."
 }
 
 install_with_apt() {
   sudo apt update
-  sudo apt install -y python3 python3-pyside6.qtwidgets python3-vdf gamescope gamemode mangohud xdg-utils
+  sudo apt install -y python3 python3-pyside6.qtwidgets python3-vdf icoutils gamescope gamemode mangohud xdg-utils
 }
 
 install_with_zypper() {
-  sudo zypper install -y python3 python3-qt6 python3-vdf gamescope gamemode mangohud xdg-utils
+  sudo zypper install -y python3 python3-qt6 python3-vdf icoutils gamescope gamemode mangohud xdg-utils
 }
 
 install_dependencies() {
@@ -128,7 +131,7 @@ install_dependencies() {
 Could not detect a supported package manager.
 
 Install these manually:
-  python3, PySide6, python-vdf/python3-vdf, gamescope, gamemode, mangohud, xdg-utils
+  python3, PySide6, python-vdf/python3-vdf, icoutils, gamescope, gamemode, mangohud, xdg-utils
 EOF
   fi
 }
@@ -148,6 +151,10 @@ fi
 
 if ! python_has_vdf; then
   echo "Warning: python-vdf is unavailable. Adding external profiles to Steam shortcuts will not work." >&2
+fi
+
+if ! need_cmd wrestool || ! need_cmd icotool; then
+  echo "Warning: icoutils is unavailable. External executable icons will use the generic icon." >&2
 fi
 
 mkdir -p "$INSTALL_DIR/assets" "$DESKTOP_DIR" "$BIN_DIR"

@@ -115,6 +115,16 @@ class ProtonPilotLogicTests(unittest.TestCase):
             data = proton_pilot.load_shortcuts(added["path"])
             self.assertEqual(data["shortcuts"]["0"]["LaunchOptions"], "gamemoderun %command%")
 
+    def test_external_icon_cache_path_is_stable_per_exe(self):
+        first = proton_pilot.external_icon_cache_path(Path("/games/One/Game.exe"))
+        second = proton_pilot.external_icon_cache_path(Path("/games/One/Game.exe"))
+        other = proton_pilot.external_icon_cache_path(Path("/games/Two/Game.exe"))
+
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, other)
+        self.assertEqual(first.suffix, ".png")
+        self.assertIn("icons", first.parts)
+
     def test_protondb_tier_helpers(self):
         summary = {"tier": "gold", "total": 182}
 
