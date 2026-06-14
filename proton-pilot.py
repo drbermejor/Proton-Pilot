@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.10.0"
+APP_VERSION = "0.10.1"
 APP_REPO = "drbermejor/Proton-Pilot"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
@@ -1513,10 +1513,21 @@ def running_appimage_path():
 def latest_release_info():
     url = f"https://api.github.com/repos/{APP_REPO}/releases/latest"
     req = urllib.request.Request(url, headers={"User-Agent": f"{APP_NAME}/{APP_VERSION}", "Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(req, timeout=10) as response:
-        if response.status != 200:
-            raise urllib.error.URLError(f"HTTP {response.status}")
-        data = json.loads(response.read().decode("utf-8", "replace"))
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status != 200:
+                raise urllib.error.URLError(f"HTTP {response.status}")
+            data = json.loads(response.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return {
+                "tag": "",
+                "url": f"https://github.com/{APP_REPO}/releases",
+                "asset_url": "",
+                "asset_name": "",
+                "missing": True,
+            }
+        raise
     asset_url = ""
     asset_name = ""
     for asset in data.get("assets", []) or []:
@@ -2057,8 +2068,19 @@ def qt_main():
                     border-radius: 10px;
                     padding: 8px;
                 }
-                QGroupBox { font-weight: 700; margin-top: 8px; }
-                QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
+                QGroupBox {
+                    font-weight: 700;
+                    margin-top: 18px;
+                    padding-top: 12px;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    subcontrol-position: top left;
+                    left: 10px;
+                    top: 4px;
+                    padding: 0 4px;
+                    background: #f8fafc;
+                }
                 QLabel#hint { color: #5f6368; }
                 QListWidget#gameList::item { min-height: 34px; padding: 3px; }
                 QCheckBox[recommended="true"] {
@@ -2160,8 +2182,8 @@ def qt_main():
                     background: #fbfcfd;
                     border: 1px solid #d5dbe0;
                     border-radius: 8px;
-                    margin-top: 12px;
-                    padding-top: 8px;
+                    margin-top: 18px;
+                    padding-top: 12px;
                 }
                 QGroupBox#optionGroup::title {
                     color: #263238;
@@ -2326,6 +2348,7 @@ def qt_main():
 
             sys_box = QtWidgets.QGroupBox("Recomendaciones segun tu sistema")
             sys_layout = QtWidgets.QVBoxLayout(sys_box)
+            sys_layout.setContentsMargins(8, 20, 8, 8)
             cards = QtWidgets.QGridLayout()
             cards.setHorizontalSpacing(6)
             cards.setVerticalSpacing(6)
@@ -2368,6 +2391,7 @@ def qt_main():
 
             action_box = QtWidgets.QGroupBox("Acciones frecuentes")
             action_layout = QtWidgets.QGridLayout(action_box)
+            action_layout.setContentsMargins(8, 20, 8, 8)
             action_layout.setHorizontalSpacing(6)
             action_layout.setVerticalSpacing(6)
             self.recommend_btn = QtWidgets.QPushButton("Recomendaciones")
@@ -2400,6 +2424,7 @@ def qt_main():
 
             tools_box = QtWidgets.QGroupBox("Herramientas y diagnostico")
             tools_layout = QtWidgets.QGridLayout(tools_box)
+            tools_layout.setContentsMargins(8, 20, 8, 8)
             tools_layout.setHorizontalSpacing(6)
             tools_layout.setVerticalSpacing(6)
             for idx, button in enumerate(
@@ -2422,6 +2447,7 @@ def qt_main():
 
             preset_box = QtWidgets.QGroupBox("Presets del juego")
             preset_layout = QtWidgets.QVBoxLayout(preset_box)
+            preset_layout.setContentsMargins(8, 20, 8, 8)
             preset_row = QtWidgets.QGridLayout()
             preset_row.setHorizontalSpacing(6)
             preset_row.setVerticalSpacing(6)
@@ -2453,6 +2479,7 @@ def qt_main():
 
             opts_box = QtWidgets.QGroupBox("Opciones que se aplicaran al lanzamiento")
             opts_layout = QtWidgets.QVBoxLayout(opts_box)
+            opts_layout.setContentsMargins(8, 20, 8, 8)
             opts_layout.setSpacing(6)
             self.option_group_boxes = []
             for group_index, (group_title, group_keys) in enumerate(OPTION_GROUPS):
@@ -2461,6 +2488,7 @@ def qt_main():
                 group.setCheckable(True)
                 group.setChecked(group_index < 2)
                 group_layout = QtWidgets.QVBoxLayout(group)
+                group_layout.setContentsMargins(8, 20, 8, 8)
                 group_layout.setSpacing(5)
                 content = QtWidgets.QWidget()
                 content_layout = QtWidgets.QVBoxLayout(content)
@@ -2514,6 +2542,7 @@ def qt_main():
 
             res_box = QtWidgets.QGroupBox("Resolucion Gamescope")
             res_layout = QtWidgets.QGridLayout(res_box)
+            res_layout.setContentsMargins(8, 20, 8, 8)
             res_layout.setHorizontalSpacing(6)
             res_layout.setVerticalSpacing(6)
             self.real_width = NoWheelSpinBox()
@@ -2545,6 +2574,7 @@ def qt_main():
 
             custom_box = QtWidgets.QGroupBox("Ajustes personalizados")
             custom_layout = QtWidgets.QFormLayout(custom_box)
+            custom_layout.setContentsMargins(8, 20, 8, 8)
             self.custom_pre = QtWidgets.QLineEdit()
             self.custom_pre.setPlaceholderText("Antes de %command%, ej: RADV_PERFTEST=rt VKD3D_CONFIG=dxr")
             self.custom_post = QtWidgets.QLineEdit()
@@ -4090,6 +4120,17 @@ def qt_main():
                     f"No he podido consultar la ultima release de GitHub.\n\n{exc}",
                 )
                 return
+            if info.get("missing"):
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Sin releases publicadas",
+                    "GitHub responde correctamente, pero este repo todavia no tiene ninguna Release publicada.\n\n"
+                    "Cuando publiques una release con AppImage, este boton podra compararla con la version instalada.\n\n"
+                    "Abrir la pagina de releases?",
+                )
+                if reply == QtWidgets.QMessageBox.Yes:
+                    open_url(info.get("url"))
+                return
             tag = info.get("tag") or "desconocida"
             message = f"Version instalada: {APP_VERSION}\nUltima release: {tag}"
             if info.get("asset_name"):
@@ -4245,7 +4286,8 @@ def qt_main():
                 "0.8.9 - Cambios pendientes, comparar, diagnostico, historial y asistente de perfil.\n"
                 "0.9.0 - Gestion de Proton por juego, recomendaciones, pestanas y builder AppImage.\n"
                 "0.9.1 - Layout responsive para evitar cortes en pantallas mas estrechas.\n"
-                "0.10.0 - Modo compacto, solo lectura, panel redimensionable, diagnostico HDR/VRR, historial Proton y acciones AppImage/update.\n\n"
+                "0.10.0 - Modo compacto, solo lectura, panel redimensionable, diagnostico HDR/VRR, historial Proton y acciones AppImage/update.\n"
+                "0.10.1 - Buscar actualizacion tolera repos sin releases y los recuadros ganan espacio para no pisar texto.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
