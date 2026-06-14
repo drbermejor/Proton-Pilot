@@ -61,6 +61,11 @@ class ProtonPilotLogicTests(unittest.TestCase):
         self.assertIn("-- mangohud %command%", command)
         self.assertNotIn("--framerate-limit 177", command)
 
+    def test_empty_launch_options_match_plain_command(self):
+        self.assertTrue(proton_pilot.launch_commands_equivalent("", "%command%"))
+        self.assertTrue(proton_pilot.launch_commands_equivalent("   ", " %command% "))
+        self.assertFalse(proton_pilot.launch_commands_equivalent("", "gamemoderun %command%"))
+
     def test_vrr_cap_detection_does_not_confuse_fixed_caps(self):
         self.assertTrue(
             proton_pilot.detect_flags("MANGOHUD_CONFIG=fps_limit=177,no_display gamescope -f -- mangohud %command%")[

@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.8.8
+Version: 0.8.9
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -46,7 +46,17 @@ tocar `localconfig.vdf`.
 - Provides an automatic shared `Recomendado del sistema` preset based on detected hardware and session.
 - Lets you create, load, update, and delete your own shared presets.
 - Lets you save a manually edited final command as a per-game custom preset.
+- Shows when the prepared command differs from the command currently saved for
+  the selected game.
+- Provides a compare view for saved vs prepared launch options.
+- Shows a pre-apply diagnostic for Steam state, tools, HDR, VRR, Gamescope
+  resolution, and risky option mismatches.
+- Keeps a small per-game launch-option history so previous commands can be
+  restored.
+- Includes a profile assistant for common goals such as performance, HDR, VRR
+  stability, Ray Tracing/DX12, handheld battery, and minimal safe setup.
 - Shows ProtonDB official summary data, colored ratings, and community launch hints when available.
+- Shows ProtonDB cache age and can refresh ProtonDB data from the recommendation dialog.
 - Opens the selected game's ProtonDB page.
 - Can apply Unreal Engine HDR config tweaks for games that need them.
 
@@ -246,6 +256,13 @@ you to open Steam manually.
 - The selected-game panel warns immediately when no preset is applied. Pending
   preset selections are shown inside the preset box, next to the selector and
   `Aplicar preset`.
+- The selected-game panel also warns when the command prepared on screen differs
+  from the command already saved for that game.
+- `Comparar` shows saved launch options next to the prepared command.
+- `Historial` can restore one of the previous commands saved before an overwrite
+  or clear operation.
+- `Asistente perfil` marks options for a selected goal, then leaves the command
+  on screen for review before applying.
 - If multiple presets generate the same launch command, Proton Pilot remembers
   the exact preset you applied for that game and selects it again when you
   return to the game.
@@ -392,3 +409,6 @@ support or game-specific configuration.
   and clarifies manual command saving by creating per-game custom presets.
 - 0.8.8: Separates the applied-preset warning from the pending selected-preset
   message so the preset selector explains its own state.
+- 0.8.9: Adds pending-change status, saved-vs-prepared comparison, pre-apply
+  diagnostics, per-game launch history/restore, ProtonDB cache refresh details,
+  and a goal-based profile assistant.

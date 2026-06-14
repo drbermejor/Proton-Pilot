@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.8"
+APP_VERSION = "0.8.9"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -83,6 +83,7 @@ DEFAULT_APP_CONFIG = {
     "protondb_cache": {},
     "last_selected": [],
     "steam_root": "",
+    "launch_history": {},
 }
 
 OPTION_INFO = {
@@ -395,6 +396,15 @@ def ensure_system_shared_preset(config, system):
 
 def normalize_command(command):
     return " ".join(str(command or "").split())
+
+
+def launch_commands_equivalent(first, second):
+    left = normalize_command(first)
+    right = normalize_command(second)
+    default_forms = {"", "%command%"}
+    if left in default_forms and right in default_forms:
+        return True
+    return left == right
 
 
 def ensure_display_preset(config, appid, display):
@@ -1306,6 +1316,19 @@ def protondb_cached_summary(config, appid, refresh=False):
     return summary
 
 
+def protondb_cache_age_label(config, appid):
+    item = config.get("protondb_cache", {}).get(str(appid), {})
+    timestamp = int(item.get("timestamp") or 0)
+    if not timestamp:
+        return ""
+    age = max(0, int(_dt.datetime.now().timestamp()) - timestamp)
+    if age < 3600:
+        return "cache hace menos de 1 h"
+    if age < 48 * 3600:
+        return f"cache hace {age // 3600} h"
+    return f"cache hace {age // 86400} dias"
+
+
 def protondb_tier(summary):
     return str((summary or {}).get("tier") or (summary or {}).get("bestReportedTier") or "").strip().lower()
 
@@ -1435,12 +1458,16 @@ def protondb_recommendation_data(game, config):
     summary = protondb_cached_summary(config, game["appid"])
     data = {"text": "", "launch_hints": [], "reports": len(reports), "summary": summary}
     if not reports:
-        lines = [f"ProtonDB: {game['name']} ({game['appid']})", ""]
+        lines = [f"ProtonDB: {game['name']} ({game['appid']})", "", "Resumen oficial"]
         lines.extend(protondb_summary_lines(summary))
+        cache_age = protondb_cache_age_label(config, game["appid"])
+        if cache_age:
+            lines.append(f"Fuente: {cache_age}")
         if summary:
             lines.extend(
                 [
                     "",
+                    "Launch options comunitarias",
                     "He encontrado el resumen oficial, pero no launch options extraibles automaticamente.",
                     "La web de ProtonDB carga los reportes detallados por JavaScript; abre la pagina para leerlos.",
                     "Si ves una launch option util, pegala en Ajustes personalizados o en Comando final.",
@@ -1469,17 +1496,21 @@ def protondb_recommendation_data(game, config):
         if notes and len(notes_bits) < 4:
             notes_bits.append(" ".join(notes.split())[:420])
 
-    lines = [f"ProtonDB: {game['name']} ({game['appid']})", ""]
+    lines = [f"ProtonDB: {game['name']} ({game['appid']})", "", "Resumen oficial"]
     lines.extend(protondb_summary_lines(summary))
+    cache_age = protondb_cache_age_label(config, game["appid"])
+    if cache_age:
+        lines.append(f"Fuente: {cache_age}")
     if summary:
         lines.append("")
     if ratings:
+        lines.append("Reportes comunitarios")
         lines.append("Ratings recientes: " + ", ".join(f"{k}: {v}" for k, v in sorted(ratings.items(), key=lambda kv: -kv[1])))
     if proton_versions:
         lines.append("Proton mencionado: " + ", ".join(k for k, _ in sorted(proton_versions.items(), key=lambda kv: -kv[1])[:5]))
     if data["launch_hints"]:
         lines.append("")
-        lines.append("Launch options detectadas:")
+        lines.append("Launch options detectadas")
         lines.extend(f"- {hint}" for hint in data["launch_hints"][:8])
     if notes_bits:
         lines.append("")
@@ -1716,6 +1747,19 @@ def qt_main():
                     border-radius: 6px;
                     padding: 7px;
                 }
+                QLabel#dirtyStatus {
+                    color: #17633a;
+                    background: #e8f5e9;
+                    border: 1px solid #81c784;
+                    border-radius: 6px;
+                    padding: 6px;
+                    font-weight: 800;
+                }
+                QLabel#dirtyStatus[dirty="true"] {
+                    color: #8a1c1c;
+                    background: #ffebee;
+                    border: 1px solid #ef5350;
+                }
                 QLabel#presetStatus {
                     color: #17633a;
                     background: #e8f5e9;
@@ -1941,6 +1985,10 @@ def qt_main():
             self.current_label.setObjectName("gameCommand")
             self.current_label.setWordWrap(True)
             game_info_layout.addWidget(self.current_label)
+            self.dirty_label = QtWidgets.QLabel("Sin cambios pendientes.")
+            self.dirty_label.setObjectName("dirtyStatus")
+            self.dirty_label.setWordWrap(True)
+            game_info_layout.addWidget(self.dirty_label)
             self.current_preset_label = QtWidgets.QLabel("Preset actual: sin detectar")
             self.current_preset_label.setObjectName("presetStatus")
             self.current_preset_label.setWordWrap(True)
@@ -1996,10 +2044,19 @@ def qt_main():
             self.open_protondb_btn = QtWidgets.QPushButton("Abrir ProtonDB")
             self.apply_system_btn = QtWidgets.QPushButton("Marcar recomendadas")
             self.apply_system_btn.setToolTip("Marca las opciones amarillas recomendadas segun tu sistema detectado. Para escribirlas en el juego, aplica un preset o guarda un comando.")
+            self.assistant_btn = QtWidgets.QPushButton("Asistente perfil")
+            self.assistant_btn.setToolTip("Marca opciones segun un objetivo: rendimiento, HDR, VRR estable, Ray Tracing o handheld.")
+            self.compare_btn = QtWidgets.QPushButton("Comparar")
+            self.compare_btn.setToolTip("Compara las opciones guardadas con el comando preparado en pantalla.")
+            self.history_btn = QtWidgets.QPushButton("Historial")
+            self.history_btn.setToolTip("Muestra comandos anteriores guardados para este juego y permite restaurarlos.")
             self.about_btn = QtWidgets.QPushButton("Acerca de")
             action_layout.addWidget(self.recommend_btn)
             action_layout.addWidget(self.open_protondb_btn)
             action_layout.addWidget(self.apply_system_btn)
+            action_layout.addWidget(self.assistant_btn)
+            action_layout.addWidget(self.compare_btn)
+            action_layout.addWidget(self.history_btn)
             action_layout.addWidget(self.about_btn)
             action_layout.addStretch(1)
             right.addWidget(action_box)
@@ -2116,6 +2173,7 @@ def qt_main():
             self.command_edit.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
             self.command_edit.setMaximumHeight(78)
             self.command_edit.setMaximumBlockCount(4)
+            self.command_edit.textChanged.connect(self.update_dirty_state)
             right.addWidget(self.command_edit, 1)
 
             buttons = QtWidgets.QHBoxLayout()
@@ -2139,6 +2197,9 @@ def qt_main():
             self.recommend_btn.clicked.connect(self.show_recommendations)
             self.open_protondb_btn.clicked.connect(self.open_protondb)
             self.apply_system_btn.clicked.connect(self.apply_system_recommended)
+            self.assistant_btn.clicked.connect(self.show_profile_assistant)
+            self.compare_btn.clicked.connect(self.show_compare_dialog)
+            self.history_btn.clicked.connect(self.show_history_dialog)
             self.launch_btn.clicked.connect(self.launch_current_game)
             self.about_btn.clicked.connect(self.show_about)
             self.apply_resolution_btn.clicked.connect(self.apply_resolution_fields)
@@ -2202,9 +2263,95 @@ def qt_main():
             self.open_protondb_btn.setEnabled(not external)
             self.recommend_btn.setEnabled(not external)
             self.launch_btn.setEnabled(bool(self.current_game))
+            self.assistant_btn.setEnabled(bool(self.current_game))
+            self.compare_btn.setEnabled(bool(self.current_game))
+            self.history_btn.setEnabled(bool(self.current_game))
             manual = bool(self.current_game and self.current_game.get("manual"))
             self.edit_game_btn.setEnabled(manual)
             self.remove_game_btn.setEnabled(manual)
+
+        def prepared_command(self):
+            return self.command_edit.toPlainText().strip()
+
+        def has_pending_command_changes(self):
+            if not self.current_game:
+                return False
+            return not launch_commands_equivalent(self.prepared_command(), self.current_game_launch_options())
+
+        def update_dirty_state(self):
+            if not getattr(self, "dirty_label", None):
+                return
+            dirty = self.has_pending_command_changes()
+            self.dirty_label.setProperty("dirty", "true" if dirty else "false")
+            self.dirty_label.style().unpolish(self.dirty_label)
+            self.dirty_label.style().polish(self.dirty_label)
+            if dirty:
+                self.dirty_label.setText("Cambios pendientes: el comando preparado no coincide con lo guardado para este juego.")
+            else:
+                self.dirty_label.setText("Sin cambios pendientes: lo preparado coincide con lo guardado.")
+
+        def remember_launch_history(self, command, reason):
+            if not self.current_game or not command:
+                return
+            appid = self.current_game["appid"]
+            history = self.app_config.setdefault("launch_history", {}).setdefault(appid, [])
+            normalized = normalize_command(command)
+            if history and normalize_command(history[0].get("command", "")) == normalized:
+                return
+            history.insert(
+                0,
+                {
+                    "timestamp": _dt.datetime.now().isoformat(timespec="seconds"),
+                    "game": self.current_game.get("name", ""),
+                    "source": "externo" if self.current_game.get("external") else "steam",
+                    "reason": reason,
+                    "command": command,
+                },
+            )
+            del history[12:]
+
+        def diagnostic_lines(self, command):
+            lines = []
+            system = self.system
+            selected = set(self.selected_keys())
+            display = system.get("display", {})
+            lines.append(f"Juego: {self.current_game['name']}")
+            lines.append(f"Destino: {'perfil externo' if self.current_game.get('external') else 'Steam localconfig.vdf'}")
+            lines.append(f"Steam abierto: {'si' if steam_is_running() else 'no'}")
+            lines.append(f"Gamescope: {'disponible' if system['tools'].get('gamescope') else 'no disponible'}")
+            lines.append(f"GameMode: {'disponible' if system['tools'].get('gamemoderun') else 'no disponible'}")
+            lines.append(f"MangoHud: {'disponible' if system['tools'].get('mangohud') else 'no disponible'}")
+            lines.append(f"HDR sistema: {'activo' if display_hdr_enabled(display) else (display.get('hdr') or 'no detectado')}")
+            lines.append(f"VRR: {(display.get('vrr') or 'no detectado')}")
+            res = self.gamescope_resolution()
+            if selected & {"REALRES", "CAPVRR"}:
+                lines.append(f"Resolucion Gamescope aplicada: {res.get('width') or '?'}x{res.get('height') or '?'}@{res.get('refresh') or '?'}")
+            warnings = []
+            if "HDR" in selected and not display_hdr_enabled(display):
+                warnings.append("HDR esta marcado, pero el sistema no informa HDR activo.")
+            if selected & {"HDR", "GAMESCOPE", "REALRES", "ADAPTIVE"} and not system["tools"].get("gamescope"):
+                warnings.append("Hay opciones Gamescope marcadas, pero gamescope no esta disponible.")
+            if "GAMEMODE" in selected and not system["tools"].get("gamemoderun"):
+                warnings.append("GameMode esta marcado, pero gamemoderun no esta disponible.")
+            if {"CAPVRR", "MANGOHUD"} & selected and not system["tools"].get("mangohud"):
+                warnings.append("MangoHud/VRR cap requieren mangohud, pero no esta disponible.")
+            if "NVIDIA" in selected and system.get("gpu") != "nvidia":
+                warnings.append("NVAPI/DLSS esta marcado en una GPU no NVIDIA.")
+            if "FSR4" in selected and system.get("gpu") != "amd":
+                warnings.append("FSR4 upgrade suele tener sentido principalmente en AMD compatible.")
+            if "CAPVRR" in selected and not display_vrr_available(display):
+                warnings.append("VRR cap esta marcado, pero VRR no aparece disponible.")
+            if "%command%" not in command:
+                warnings.append("El comando no contiene %command%; Steam podria no lanzar el juego como esperas.")
+            if warnings:
+                lines.extend(["", "Avisos:"])
+                lines.extend(f"- {warning}" for warning in warnings)
+            else:
+                lines.extend(["", "Diagnostico: no veo avisos importantes."])
+            return lines
+
+        def diagnostic_text(self, command):
+            return "\n".join(self.diagnostic_lines(command))
 
         def cached_game_summary(self, appid):
             item = self.app_config.get("protondb_cache", {}).get(str(appid), {})
@@ -2258,6 +2405,9 @@ def qt_main():
                 details.append(f"confianza {confidence}")
             if best and str(best).lower() != tier:
                 details.append(f"mejor {str(best).upper()}")
+            cache_age = protondb_cache_age_label(self.app_config, self.current_game["appid"]) if self.current_game else ""
+            if cache_age:
+                details.append(cache_age)
             self.protondb_badge.setText("ProtonDB  " + rating + (f"  ·  {' · '.join(details)}" if details else ""))
             self.protondb_badge.setStyleSheet(f"background: {bg}; color: {fg}; border: 1px solid {fg};")
             self.protondb_badge.setVisible(True)
@@ -2329,8 +2479,13 @@ def qt_main():
             self.active_gamescope_res = display_resolution_or_empty(res)
             self.set_resolution_fields(res)
             self.refresh_presets()
-            self.select_matching_preset(current)
-            self.update_command()
+            matched_ref = self.select_matching_preset(current)
+            _, _, matched_preset = self.preset_from_ref(matched_ref)
+            if matched_preset and "options" not in matched_preset:
+                self.command_edit.setPlainText(current)
+            else:
+                self.update_command()
+            self.update_dirty_state()
 
         def add_manual_game(self):
             dialog = QtWidgets.QDialog(self)
@@ -2809,6 +2964,7 @@ def qt_main():
                 self.set_preset_choice_status("Elige un preset para cargarlo. Al elegir uno distinto, aparecera como pendiente aqui.", pending=False)
             self.preset_combo.blockSignals(False)
             self.apply_preset_btn.setEnabled(False)
+            return ref
 
         def current_preset_payload(self):
             command = compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text(), self.gamescope_resolution())
@@ -2877,7 +3033,8 @@ def qt_main():
                 reply = QtWidgets.QMessageBox.question(
                     self,
                     "Guardar comando manual",
-                    f"Guardar el Comando final editado a mano como preset custom y escribirlo en {target}?\n\n{self.current_game['name']}",
+                    f"Guardar el Comando final editado a mano como preset custom y escribirlo en {target}?\n\n"
+                    f"{self.diagnostic_text(command)}",
                 )
                 return reply == QtWidgets.QMessageBox.Yes
             reply = QtWidgets.QMessageBox.question(
@@ -2885,7 +3042,7 @@ def qt_main():
                 "Comando generado por controles",
                 "El Comando final coincide con las casillas y campos de Proton Pilot.\n\n"
                 "Este boton esta pensado para comandos escritos a mano. Para un perfil normal suele ser mas claro usar Crear nuevo preset, Actualizar preset o Aplicar preset.\n\n"
-                f"Guardar este comando igualmente en {target}?",
+                f"Guardar este comando igualmente en {target}?\n\n{self.diagnostic_text(command)}",
             )
             return reply == QtWidgets.QMessageBox.Yes
 
@@ -2940,10 +3097,11 @@ def qt_main():
             ref, name = self.load_selected_preset()
             if not ref or not self.current_game:
                 return
+            command = self.prepared_command()
             reply = QtWidgets.QMessageBox.question(
                 self,
                 "Aplicar preset",
-                f"Aplicar este preset como opciones de lanzamiento?\n\n{name}\n\nJuego:\n{self.current_game['name']}",
+                f"Aplicar este preset como opciones de lanzamiento?\n\n{name}\n\n{self.diagnostic_text(command)}",
             )
             if reply != QtWidgets.QMessageBox.Yes:
                 return
@@ -3076,6 +3234,176 @@ def qt_main():
             env["STEAM_COMPAT_DATA_PATH"] = str(prefix)
             subprocess.Popen(command, shell=True, cwd=str(Path(self.current_game["exe"]).parent), env=env)
 
+        def show_compare_dialog(self):
+            if not self.current_game:
+                return
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Comparar opciones")
+            dialog.resize(980, 520)
+            layout = QtWidgets.QVBoxLayout(dialog)
+            status = QtWidgets.QLabel(
+                "Hay cambios pendientes." if self.has_pending_command_changes() else "El comando preparado coincide con lo guardado."
+            )
+            status.setWordWrap(True)
+            layout.addWidget(status)
+            cols = QtWidgets.QHBoxLayout()
+            layout.addLayout(cols, 1)
+            saved = QtWidgets.QPlainTextEdit()
+            saved.setReadOnly(True)
+            saved.setPlainText(self.current_game_launch_options() or "(sin opciones guardadas)")
+            prepared = QtWidgets.QPlainTextEdit()
+            prepared.setReadOnly(True)
+            prepared.setPlainText(self.prepared_command() or "(sin comando preparado)")
+            saved_box = QtWidgets.QGroupBox("Guardado ahora")
+            saved_layout = QtWidgets.QVBoxLayout(saved_box)
+            saved_layout.addWidget(saved)
+            prepared_box = QtWidgets.QGroupBox("Preparado en pantalla")
+            prepared_layout = QtWidgets.QVBoxLayout(prepared_box)
+            prepared_layout.addWidget(prepared)
+            cols.addWidget(saved_box)
+            cols.addWidget(prepared_box)
+            close_btn = QtWidgets.QPushButton("Cerrar")
+            close_btn.clicked.connect(dialog.accept)
+            layout.addWidget(close_btn, 0, QtCore.Qt.AlignRight)
+            dialog.exec()
+
+        def show_history_dialog(self):
+            if not self.current_game:
+                return
+            appid = self.current_game["appid"]
+            history = self.app_config.setdefault("launch_history", {}).get(appid, [])
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Historial de opciones")
+            dialog.resize(900, 520)
+            layout = QtWidgets.QVBoxLayout(dialog)
+            list_widget = QtWidgets.QListWidget()
+            for entry in history:
+                label = f"{entry.get('timestamp', '')} · {entry.get('reason', '')}"
+                item = QtWidgets.QListWidgetItem(label)
+                item.setData(QtCore.Qt.UserRole, entry)
+                list_widget.addItem(item)
+            layout.addWidget(list_widget, 1)
+            preview = QtWidgets.QPlainTextEdit()
+            preview.setReadOnly(True)
+            preview.setPlaceholderText("Selecciona una entrada para ver el comando.")
+            layout.addWidget(preview, 1)
+            buttons = QtWidgets.QHBoxLayout()
+            layout.addLayout(buttons)
+            close_btn = QtWidgets.QPushButton("Cerrar")
+            restore_btn = QtWidgets.QPushButton("Restaurar seleccionado")
+            restore_btn.setEnabled(False)
+            buttons.addStretch(1)
+            buttons.addWidget(close_btn)
+            buttons.addWidget(restore_btn)
+
+            def show_entry(item):
+                entry = item.data(QtCore.Qt.UserRole) if item else None
+                preview.setPlainText((entry or {}).get("command", ""))
+                restore_btn.setEnabled(bool(entry))
+
+            def restore_entry():
+                item = list_widget.currentItem()
+                if not item:
+                    return
+                entry = item.data(QtCore.Qt.UserRole)
+                command = entry.get("command", "")
+                if not command:
+                    return
+                self.command_edit.setPlainText(command)
+                dialog.accept()
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Restaurar historial",
+                    "Restaurar este comando como opciones de lanzamiento del juego?\n\n"
+                    + self.diagnostic_text(command),
+                )
+                if reply == QtWidgets.QMessageBox.Yes:
+                    self.save(confirm=False)
+
+            list_widget.currentItemChanged.connect(show_entry)
+            close_btn.clicked.connect(dialog.reject)
+            restore_btn.clicked.connect(restore_entry)
+            if list_widget.count():
+                list_widget.setCurrentRow(0)
+            else:
+                preview.setPlainText("No hay historial guardado para este juego todavia.")
+            dialog.exec()
+
+        def profile_options_for_goal(self, goal):
+            keys = set()
+            if goal in {"performance", "hdr", "vrr", "rt"}:
+                keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "REALRES") if k in self.system_recommended)
+            if goal == "performance":
+                keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "REALRES", "FSR4") if k in self.system_recommended)
+            elif goal == "hdr":
+                keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "REALRES", "HDR", "PROTONHDR", "FSR4") if k in self.system_recommended)
+            elif goal == "vrr":
+                keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "REALRES", "ADAPTIVE", "CAPVRR") if k in self.system_recommended)
+            elif goal == "rt":
+                keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "REALRES") if k in self.system_recommended)
+                keys.update({"RT", "DX12"})
+                if "FSR4" in self.system_recommended:
+                    keys.add("FSR4")
+                if self.system.get("gpu") == "nvidia":
+                    keys.add("NVIDIA")
+            elif goal == "handheld":
+                keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "HANDHELD800P", "CAP60") if k in OPTION_INFO)
+                if "FSR4" in self.system_recommended:
+                    keys.add("FSR4")
+            elif goal == "safe":
+                keys.update(k for k in ("GAMEMODE",) if k in self.system_recommended)
+            return keys
+
+        def show_profile_assistant(self):
+            if not self.current_game:
+                return
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Asistente de perfil")
+            layout = QtWidgets.QVBoxLayout(dialog)
+            label = QtWidgets.QLabel("Elige un objetivo. Proton Pilot marcara opciones razonables para revisarlas antes de aplicar.")
+            label.setWordWrap(True)
+            layout.addWidget(label)
+            choices = [
+                ("performance", "Rendimiento equilibrado"),
+                ("hdr", "HDR"),
+                ("vrr", "VRR estable"),
+                ("rt", "Ray Tracing / DX12"),
+                ("handheld", "Handheld / bateria"),
+                ("safe", "Minimo seguro"),
+            ]
+            combo = QtWidgets.QComboBox()
+            for key, text in choices:
+                combo.addItem(text, key)
+            layout.addWidget(combo)
+            preview = QtWidgets.QPlainTextEdit()
+            preview.setReadOnly(True)
+            layout.addWidget(preview)
+            buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+            layout.addWidget(buttons)
+
+            def update_preview():
+                keys = self.profile_options_for_goal(combo.currentData())
+                labels = [OPTION_INFO[key]["label"] for key in OPTION_INFO if key in keys]
+                preview.setPlainText("\n".join(labels) or "No hay opciones recomendadas detectadas para este objetivo.")
+
+            def accept():
+                keys = self.profile_options_for_goal(combo.currentData())
+                for key, cb in self.checks.items():
+                    cb.setChecked(key in keys)
+                if "REALRES" in keys:
+                    display = display_resolution_or_empty(self.system.get("display", {}))
+                    if display["width"] and display["height"]:
+                        self.active_gamescope_res = display
+                        self.set_resolution_fields(display)
+                self.update_command()
+                dialog.accept()
+
+            combo.currentIndexChanged.connect(update_preview)
+            buttons.accepted.connect(accept)
+            buttons.rejected.connect(dialog.reject)
+            update_preview()
+            dialog.exec()
+
         def apply_system_recommended(self):
             for key in self.system_recommended:
                 if key in self.checks:
@@ -3122,7 +3450,8 @@ def qt_main():
                 "0.8.5 - Selector de presets carga opciones automaticamente y aplicar pide confirmacion.\n"
                 "0.8.6 - Recuerda el preset exacto aplicado y avisa en rojo si hay uno pendiente.\n"
                 "0.8.7 - Iconos para ejecutables externos y comandos manuales guardados como presets custom.\n"
-                "0.8.8 - Estado de preset aplicado separado del preset seleccionado pendiente.\n\n"
+                "0.8.8 - Estado de preset aplicado separado del preset seleccionado pendiente.\n"
+                "0.8.9 - Cambios pendientes, comparar, diagnostico, historial y asistente de perfil.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
@@ -3149,14 +3478,30 @@ def qt_main():
             buttons = QtWidgets.QHBoxLayout()
             layout.addLayout(buttons)
             open_btn = QtWidgets.QPushButton("Abrir ProtonDB")
+            refresh_btn = QtWidgets.QPushButton("Actualizar datos")
             apply_btn = QtWidgets.QPushButton("Aceptar y aplicar seleccion")
             close_btn = QtWidgets.QPushButton("Cerrar")
             buttons.addWidget(open_btn)
+            buttons.addWidget(refresh_btn)
             buttons.addStretch(1)
             buttons.addWidget(close_btn)
             buttons.addWidget(apply_btn)
             open_btn.clicked.connect(self.open_protondb)
             close_btn.clicked.connect(dialog.reject)
+
+            def refresh_data():
+                protondb_cached_summary(self.app_config, self.current_game["appid"], refresh=True)
+                save_app_config(self.app_config)
+                refreshed = protondb_recommendation_data(self.current_game, self.app_config)
+                text.setPlainText(refreshed["text"])
+                combo.clear()
+                combo.addItem("No aplicar launch options de ProtonDB", "")
+                for hint in refreshed["launch_hints"][:8]:
+                    combo.addItem(hint, hint)
+                self.update_current_item_rating(refreshed["summary"])
+                self.update_protondb_badge(refreshed["summary"])
+
+            refresh_btn.clicked.connect(refresh_data)
 
             def apply_hint():
                 hint = combo.currentData()
@@ -3194,6 +3539,7 @@ def qt_main():
                 custom_preset_name = self.maybe_create_manual_command_preset(command) if confirm else ""
                 if custom_preset_name is None:
                     return
+                self.remember_launch_history(self.current_game_launch_options(), "antes de guardar")
                 self.app_config.setdefault("external_launch_options", {})[self.current_game["appid"]] = command
                 self.save_custom()
                 shortcut_note = ""
@@ -3251,6 +3597,7 @@ def qt_main():
             custom_preset_name = self.maybe_create_manual_command_preset(command) if confirm else ""
             if custom_preset_name is None:
                 return
+            self.remember_launch_history(self.current_game_launch_options(), "antes de guardar")
             reopen_steam = False
             if steam_is_running():
                 reply = QtWidgets.QMessageBox.question(
@@ -3299,6 +3646,7 @@ def qt_main():
             if reply != QtWidgets.QMessageBox.Yes:
                 return
             if self.current_game.get("external"):
+                self.remember_launch_history(self.current_game_launch_options(), "antes de borrar")
                 self.app_config.setdefault("external_launch_options", {}).pop(self.current_game["appid"], None)
                 for cb in self.checks.values():
                     cb.setChecked(False)
@@ -3331,6 +3679,7 @@ def qt_main():
                     )
                     return
                 reopen_steam = True
+            self.remember_launch_history(self.current_game_launch_options(), "antes de borrar")
             backup = set_launch_options(self.config_path, self.current_game["appid"], "")
             for cb in self.checks.values():
                 cb.setChecked(False)
