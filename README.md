@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.9.1
+Version: 0.10.0
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -44,7 +44,10 @@ tocar `localconfig.vdf`.
   setups, and Steam defaults when nothing special is needed.
 - Creates a backup before writing changes.
 - Shows system-aware recommendations based on detected GPU, session type, and installed tools.
-- Shows clear system status cards for display resolution, HDR, VRR, GPU, and tools.
+- Shows clear system status cards for display resolution, HDR, VRR, GPU, tools,
+  and Gaming Mode/Desktop Mode.
+- Provides a compact mode for smaller screens and a read-only mode for safe
+  inspection without writing launch options or presets.
 - Detects Bazzite, SteamOS-style sessions, Lenovo Legion Go devices, and handheld-friendly setups.
 - Detects the primary monitor resolution and can force Gamescope to expose the real physical resolution to the game.
 - Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
@@ -56,14 +59,20 @@ tocar `localconfig.vdf`.
 - Provides a compare view for saved vs prepared launch options.
 - Shows a pre-apply diagnostic for Steam state, tools, HDR, VRR, Gamescope
   resolution, and risky option mismatches.
+- Includes a dedicated HDR/VRR diagnostic explaining what KDE/Gamescope reports
+  and what may be missing.
 - Keeps a small per-game launch-option history so previous commands can be
   restored.
+- Keeps a small per-game Proton-version history so previous compatibility-tool
+  choices can be restored when the old Proton build is still installed.
 - Includes a profile assistant for common goals such as performance, HDR, VRR
   stability, Ray Tracing/DX12, handheld battery, and minimal safe setup.
 - Shows ProtonDB official summary data, colored ratings, and community launch hints when available.
 - Shows ProtonDB cache age and can refresh ProtonDB data from the recommendation dialog.
 - Opens the selected game's ProtonDB page.
 - Can apply Unreal Engine HDR config tweaks for games that need them.
+- Can register the generated AppImage as a Steam non-Steam shortcut.
+- Can check the latest GitHub release and open the AppImage download page.
 
 ## Install
 
@@ -243,13 +252,17 @@ Known limitations for running the app itself inside Gaming Mode:
   should be avoided.
 - The UI is still denser than a handheld-first flow should be.
 
+Implemented safety for Gaming Mode:
+
+- Proton Pilot detects likely Gaming Mode sessions.
+- It avoids automatic Steam shutdown when Gaming Mode is detected.
+- It includes read-only mode and an AppImage registration button.
+
 Future Gaming Mode work:
 
 - Add a dedicated `Handheld UI` mode with large controls and fewer panels.
 - Provide a controller-friendly wizard: game, goal, Proton, apply.
-- Avoid automatic Steam shutdown when Gaming Mode is detected.
-- Add an optional helper to register the AppImage as a non-Steam app.
-- Add a read-only quick status view suitable for launching from Gaming Mode.
+- Improve controller navigation and focus order inside Gamescope.
 
 ## Uninstall
 
@@ -303,6 +316,9 @@ When Steam is open, the GUI can close Steam, write or clear launch options, and
 then try to reopen Steam. If reopening fails, Proton Pilot shows a message asking
 you to open Steam manually.
 
+If Proton Pilot detects Steam Gaming Mode, it avoids closing Steam automatically
+and asks you to apply Steam-writing changes from Desktop Mode instead.
+
 ## Recommendation Colors
 
 - Green: generally recommended default.
@@ -312,6 +328,8 @@ you to open Steam manually.
 ## Interface Notes
 
 - The game list keeps a compact width and uses a horizontal scrollbar for long names.
+- The left game panel is resizable, so wide game names and the right-side controls
+  can be balanced manually.
 - Steam library icons are shown when they exist in Steam's local cache.
 - External executable icons are extracted from the `.exe` when `icoutils` is
   installed; otherwise Proton Pilot falls back to the generic icon.
@@ -334,16 +352,27 @@ you to open Steam manually.
   advanced command/resolution controls.
 - The summary, actions, preset, Proton, and Gamescope resolution controls wrap
   into multiple rows on narrower screens to avoid clipped content.
+- Frequent actions and diagnostic/maintenance tools are separated into different
+  groups to reduce visual noise.
 - The selected-game panel also warns when the command prepared on screen differs
   from the command already saved for that game.
 - `Comparar` shows saved launch options next to the prepared command.
 - `Historial` can restore one of the previous commands saved before an overwrite
   or clear operation.
+- `Historial Proton` can restore a previously used Proton compatibility tool if
+  that Proton version is still installed.
+- `Aplicar cambios preparados` writes the command currently visible on screen.
+- `Modo compacto` hides technical descriptions and shortens the command summary
+  for smaller screens.
+- `Solo lectura` lets you inspect games, presets, ProtonDB, diagnostics, and
+  commands without writing to Steam or changing presets.
 - `Asistente perfil` marks options for a selected goal, then leaves the command
   on screen for review before applying.
 - If multiple presets generate the same launch command, Proton Pilot remembers
   the exact preset you applied for that game and selects it again when you
   return to the game.
+- Launch options are grouped into collapsible sections: performance, display/HDR,
+  handheld scaling, and Proton compatibility.
 
 ## External Executables
 
@@ -496,3 +525,7 @@ support or game-specific configuration.
 - 0.9.1: Improves responsive layout so Proton, system cards, action buttons,
   presets, and Gamescope resolution controls do not get clipped on narrower
   windows.
+- 0.10.0: Adds compact/read-only modes, a resizable game panel, grouped launch
+  options, clearer frequent-vs-diagnostic actions, HDR/VRR diagnostics, Proton
+  rollback history, Gaming Mode write safety, AppImage Steam registration, and
+  GitHub release update checks.
