@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.4"
+APP_VERSION = "0.8.5"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -1591,6 +1591,7 @@ def qt_main():
             self.games = merged_games(self.root, self.app_config)
             self.checks = {}
             self.current_game = None
+            self.current_applied_preset_ref = ""
             self.active_gamescope_res = display_resolution_or_empty(self.system.get("display", {}))
 
             self.setStyleSheet(
@@ -1928,9 +1929,10 @@ def qt_main():
             preset_box = QtWidgets.QGroupBox("Presets del juego")
             preset_layout = QtWidgets.QHBoxLayout(preset_box)
             self.preset_combo = NoWheelComboBox()
-            self.preset_combo.setToolTip("La rueda del raton no cambia este selector para evitar cambios accidentales al desplazarte.")
-            self.apply_preset_btn = QtWidgets.QPushButton("Cargar preset en pantalla")
-            self.apply_preset_btn.setToolTip("Carga el preset en los controles. No escribe en Steam hasta que pulses Guardar opciones.")
+            self.preset_combo.setToolTip("Selecciona un preset para cargar automaticamente sus opciones en pantalla. La rueda del raton no cambia este selector.")
+            self.apply_preset_btn = QtWidgets.QPushButton("Aplicar preset")
+            self.apply_preset_btn.setToolTip("Guarda el preset seleccionado como opciones de lanzamiento del juego, con confirmacion.")
+            self.apply_preset_btn.setEnabled(False)
             self.save_preset_btn = QtWidgets.QPushButton("Crear nuevo preset")
             self.save_preset_btn.setToolTip("Crea un preset compartido disponible para cualquier juego.")
             self.update_preset_btn = QtWidgets.QPushButton("Actualizar preset")
@@ -2056,7 +2058,8 @@ def qt_main():
             self.about_btn.clicked.connect(self.show_about)
             self.apply_resolution_btn.clicked.connect(self.apply_resolution_fields)
             self.detect_display_btn.clicked.connect(self.use_detected_display)
-            self.apply_preset_btn.clicked.connect(self.apply_preset)
+            self.preset_combo.currentIndexChanged.connect(self.on_preset_selected)
+            self.apply_preset_btn.clicked.connect(self.apply_selected_preset)
             self.save_preset_btn.clicked.connect(self.save_preset)
             self.update_preset_btn.clicked.connect(self.update_preset)
             self.delete_preset_btn.clicked.connect(self.delete_preset)
@@ -2647,6 +2650,7 @@ def qt_main():
                 for name in sorted(game):
                     self.preset_combo.addItem(f"Juego: {name}", preset_ref("game", name))
             self.preset_combo.blockSignals(False)
+            self.apply_preset_btn.setEnabled(False)
 
         def preset_command(self, preset):
             if not preset:
@@ -2672,13 +2676,18 @@ def qt_main():
 
         def select_matching_preset(self, command):
             ref, name = self.matching_preset_ref(command)
+            self.current_applied_preset_ref = ref
+            self.preset_combo.blockSignals(True)
             if ref:
                 index = self.preset_combo.findData(ref)
                 if index >= 0:
                     self.preset_combo.setCurrentIndex(index)
                 self.current_preset_label.setText(f"Preset actual aplicado: {name}")
             else:
+                self.preset_combo.setCurrentIndex(-1)
                 self.current_preset_label.setText("Preset actual: no coincide con ningun preset guardado")
+            self.preset_combo.blockSignals(False)
+            self.apply_preset_btn.setEnabled(False)
 
         def current_preset_payload(self):
             command = compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text(), self.gamescope_resolution())
@@ -2691,13 +2700,15 @@ def qt_main():
                 "command": command,
             }
 
-        def apply_preset(self):
+        def load_selected_preset(self):
             ref = self.preset_combo.currentData()
             if not ref:
-                return
+                self.apply_preset_btn.setEnabled(False)
+                return "", ""
             scope, name, preset = self.preset_from_ref(ref)
             if not preset:
-                return
+                self.apply_preset_btn.setEnabled(False)
+                return "", ""
             selected = set(preset.get("options", []))
             for key, cb in self.checks.items():
                 cb.blockSignals(True)
@@ -2717,12 +2728,29 @@ def qt_main():
             else:
                 command = preset.get("command", "")
                 self.command_edit.setPlainText(command)
-            self.current_preset_label.setText(f"Preset cargado en pantalla: {name}")
-            QtWidgets.QMessageBox.information(
+            if ref == self.current_applied_preset_ref:
+                self.current_preset_label.setText(f"Preset actual aplicado: {name}")
+                self.apply_preset_btn.setEnabled(False)
+            else:
+                self.current_preset_label.setText(f"Preset seleccionado pendiente de aplicar: {name}")
+                self.apply_preset_btn.setEnabled(True)
+            return ref, name
+
+        def on_preset_selected(self):
+            self.load_selected_preset()
+
+        def apply_selected_preset(self):
+            ref, name = self.load_selected_preset()
+            if not ref or not self.current_game:
+                return
+            reply = QtWidgets.QMessageBox.question(
                 self,
-                "Preset cargado",
-                f"Preset cargado en pantalla:\n\n{name}\n\nOrigen: {'compartido' if scope == 'shared' else 'del juego'}\n\nRevisa el comando final y pulsa Guardar opciones para escribirlo en Steam.",
+                "Aplicar preset",
+                f"Aplicar este preset como opciones de lanzamiento?\n\n{name}\n\nJuego:\n{self.current_game['name']}",
             )
+            if reply != QtWidgets.QMessageBox.Yes:
+                return
+            self.save(confirm=False)
 
         def save_preset(self):
             if not self.current_game:
@@ -2890,7 +2918,8 @@ def qt_main():
                 "0.8.1 - Recomendadas amarillas, ratings ProtonDB en juegos y accesos directos Steam externos.\n"
                 "0.8.2 - Tarjetas HDR/VRR, badge ProtonDB y recomendaciones VRR/Adaptive en rojo de prueba.\n"
                 "0.8.3 - Preset recomendado del sistema, panel de juego claro y gestion de manuales.\n"
-                "0.8.4 - Corrige listado inicial para mostrar todos los juegos detectados.\n\n"
+                "0.8.4 - Corrige listado inicial para mostrar todos los juegos detectados.\n"
+                "0.8.5 - Selector de presets carga opciones automaticamente y aplicar pide confirmacion.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
@@ -2945,18 +2974,19 @@ def qt_main():
             custom["side_effect_options"] = [key for key in self.selected_keys() if key in SIDE_EFFECT_OPTIONS]
             save_app_config(self.app_config)
 
-        def save(self):
+        def save(self, checked=False, confirm=True):
             if not self.current_game:
                 return
             if self.current_game.get("external"):
                 command = self.command_edit.toPlainText().strip()
-                reply = QtWidgets.QMessageBox.question(
-                    self,
-                    "Guardar opciones",
-                    f"Guardar estas opciones en el perfil local de Proton Pilot?\n\n{self.current_game['name']}",
-                )
-                if reply != QtWidgets.QMessageBox.Yes:
-                    return
+                if confirm:
+                    reply = QtWidgets.QMessageBox.question(
+                        self,
+                        "Guardar opciones",
+                        f"Guardar estas opciones en el perfil local de Proton Pilot?\n\n{self.current_game['name']}",
+                    )
+                    if reply != QtWidgets.QMessageBox.Yes:
+                        return
                 self.app_config.setdefault("external_launch_options", {})[self.current_game["appid"]] = command
                 self.save_custom()
                 shortcut_note = ""
@@ -3006,13 +3036,14 @@ def qt_main():
                 self.select_game(self.game_list.currentItem())
                 return
             command = self.command_edit.toPlainText().strip()
-            reply = QtWidgets.QMessageBox.question(
-                self,
-                "Guardar opciones",
-                f"Guardar estas opciones de lanzamiento en Steam?\n\n{self.current_game['name']}",
-            )
-            if reply != QtWidgets.QMessageBox.Yes:
-                return
+            if confirm:
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Guardar opciones",
+                    f"Guardar estas opciones de lanzamiento en Steam?\n\n{self.current_game['name']}",
+                )
+                if reply != QtWidgets.QMessageBox.Yes:
+                    return
             reopen_steam = False
             if steam_is_running():
                 reply = QtWidgets.QMessageBox.question(

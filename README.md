@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.8.4
+Version: 0.8.5
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -232,6 +232,8 @@ you to open Steam manually.
   the saved Steam launch options for the selected game.
 - The selected game panel shows the currently saved launch command and whether it
   matches a saved preset.
+- Selecting a preset loads its options immediately. `Aplicar preset` is only
+  needed when you want to save that selected preset to the game.
 
 ## External Executables
 
@@ -365,3 +367,6 @@ support or game-specific configuration.
   names, and removed launch confirmation popups.
 - 0.8.4: Fixed initial game-list population so every detected Steam game appears
   in the GUI, not only the last sorted entry.
+- 0.8.5: Preset selection now loads options automatically, the current applied
+  preset is selected when opening a game, and applying a different preset asks
+  for confirmation.
