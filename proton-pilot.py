@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.7"
+APP_VERSION = "0.8.8"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -1729,6 +1729,24 @@ def qt_main():
                     background: #ffebee;
                     border: 1px solid #ef5350;
                 }
+                QLabel#presetChoiceStatus {
+                    color: #29434e;
+                    background: #eef3f7;
+                    border: 1px solid #b0bec5;
+                    border-radius: 6px;
+                    padding: 6px;
+                    font-weight: 800;
+                }
+                QLabel#presetChoiceStatus[pending="true"] {
+                    color: #8a1c1c;
+                    background: #ffebee;
+                    border: 1px solid #ef5350;
+                }
+                QLabel#presetChoiceStatus[applied="true"] {
+                    color: #17633a;
+                    background: #e8f5e9;
+                    border: 1px solid #81c784;
+                }
                 QFrame#hero {
                     background: #eef7f2;
                     border: 1px solid #b7dfc5;
@@ -1987,7 +2005,8 @@ def qt_main():
             right.addWidget(action_box)
 
             preset_box = QtWidgets.QGroupBox("Presets del juego")
-            preset_layout = QtWidgets.QHBoxLayout(preset_box)
+            preset_layout = QtWidgets.QVBoxLayout(preset_box)
+            preset_row = QtWidgets.QHBoxLayout()
             self.preset_combo = NoWheelComboBox()
             self.preset_combo.setToolTip("Selecciona un preset para cargar automaticamente sus opciones en pantalla. La rueda del raton no cambia este selector.")
             self.apply_preset_btn = QtWidgets.QPushButton("Aplicar preset")
@@ -1997,11 +2016,16 @@ def qt_main():
             self.save_preset_btn.setToolTip("Crea un preset compartido disponible para cualquier juego.")
             self.update_preset_btn = QtWidgets.QPushButton("Actualizar preset")
             self.delete_preset_btn = QtWidgets.QPushButton("Borrar preset")
-            preset_layout.addWidget(self.preset_combo, 1)
-            preset_layout.addWidget(self.apply_preset_btn)
-            preset_layout.addWidget(self.save_preset_btn)
-            preset_layout.addWidget(self.update_preset_btn)
-            preset_layout.addWidget(self.delete_preset_btn)
+            preset_row.addWidget(self.preset_combo, 1)
+            preset_row.addWidget(self.apply_preset_btn)
+            preset_row.addWidget(self.save_preset_btn)
+            preset_row.addWidget(self.update_preset_btn)
+            preset_row.addWidget(self.delete_preset_btn)
+            preset_layout.addLayout(preset_row)
+            self.preset_choice_label = QtWidgets.QLabel("Selecciona un preset para cargarlo.")
+            self.preset_choice_label.setObjectName("presetChoiceStatus")
+            self.preset_choice_label.setWordWrap(True)
+            preset_layout.addWidget(self.preset_choice_label)
             right.addWidget(preset_box)
 
             opts_box = QtWidgets.QGroupBox("Opciones que se aplicaran al lanzamiento")
@@ -2712,6 +2736,8 @@ def qt_main():
                     self.preset_combo.addItem(f"Juego: {name}", preset_ref("game", name))
             self.preset_combo.blockSignals(False)
             self.apply_preset_btn.setEnabled(False)
+            if not shared and not game:
+                self.set_preset_choice_status("No hay presets guardados para cargar.", pending=False)
 
         def preset_command(self, preset):
             if not preset:
@@ -2730,6 +2756,19 @@ def qt_main():
             self.current_preset_label.style().unpolish(self.current_preset_label)
             self.current_preset_label.style().polish(self.current_preset_label)
             self.current_preset_label.setText(text)
+
+        def set_preset_choice_status(self, text, pending=False, applied=False):
+            self.preset_choice_label.setProperty("pending", "true" if pending else "false")
+            self.preset_choice_label.setProperty("applied", "true" if applied else "false")
+            self.preset_choice_label.style().unpolish(self.preset_choice_label)
+            self.preset_choice_label.style().polish(self.preset_choice_label)
+            self.preset_choice_label.setText(text)
+
+        def current_applied_preset_name(self):
+            if not self.current_applied_preset_ref:
+                return ""
+            _, name = split_preset_ref(self.current_applied_preset_ref)
+            return name
 
         def preset_matches_command(self, ref, command):
             _, _, preset = self.preset_from_ref(ref)
@@ -2760,9 +2799,14 @@ def qt_main():
                 if index >= 0:
                     self.preset_combo.setCurrentIndex(index)
                 self.set_preset_status(f"Preset actual aplicado: {name}", pending=False)
+                self.set_preset_choice_status(f"Seleccionado y aplicado: {name}", applied=True)
             else:
                 self.preset_combo.setCurrentIndex(-1)
-                self.set_preset_status("Preset actual: no coincide con ningun preset guardado", pending=True)
+                if normalize_command(command):
+                    self.set_preset_status("Sin preset aplicado: las opciones actuales no coinciden con ningun preset guardado.", pending=True)
+                else:
+                    self.set_preset_status("Sin preset aplicado todavia.", pending=True)
+                self.set_preset_choice_status("Elige un preset para cargarlo. Al elegir uno distinto, aparecera como pendiente aqui.", pending=False)
             self.preset_combo.blockSignals(False)
             self.apply_preset_btn.setEnabled(False)
 
@@ -2824,6 +2868,7 @@ def qt_main():
                 self.preset_combo.blockSignals(False)
             self.current_applied_preset_ref = ref
             self.set_preset_status(f"Preset custom aplicado: {name}", pending=False)
+            self.set_preset_choice_status(f"Seleccionado y aplicado: {name}", applied=True)
             return name
 
         def confirm_manual_command_save(self, command, external=False):
@@ -2848,10 +2893,12 @@ def qt_main():
             ref = self.preset_combo.currentData()
             if not ref:
                 self.apply_preset_btn.setEnabled(False)
+                self.set_preset_choice_status("Elige un preset para cargarlo.", pending=False)
                 return "", ""
             scope, name, preset = self.preset_from_ref(ref)
             if not preset:
                 self.apply_preset_btn.setEnabled(False)
+                self.set_preset_choice_status("Ese preset ya no existe.", pending=True)
                 return "", ""
             selected = set(preset.get("options", []))
             for key, cb in self.checks.items():
@@ -2874,9 +2921,15 @@ def qt_main():
                 self.command_edit.setPlainText(command)
             if ref == self.current_applied_preset_ref:
                 self.set_preset_status(f"Preset actual aplicado: {name}", pending=False)
+                self.set_preset_choice_status(f"Seleccionado y aplicado: {name}", applied=True)
                 self.apply_preset_btn.setEnabled(False)
             else:
-                self.set_preset_status(f"Preset seleccionado pendiente de aplicar: {name}", pending=True)
+                applied_name = self.current_applied_preset_name()
+                if applied_name:
+                    self.set_preset_status(f"Preset actual aplicado: {applied_name}", pending=False)
+                else:
+                    self.set_preset_status("Sin preset aplicado: el preset elegido aun no se ha escrito en el juego.", pending=True)
+                self.set_preset_choice_status(f"Pendiente de aplicar: {name}", pending=True)
                 self.apply_preset_btn.setEnabled(True)
             return ref, name
 
@@ -3068,7 +3121,8 @@ def qt_main():
                 "0.8.4 - Corrige listado inicial para mostrar todos los juegos detectados.\n"
                 "0.8.5 - Selector de presets carga opciones automaticamente y aplicar pide confirmacion.\n"
                 "0.8.6 - Recuerda el preset exacto aplicado y avisa en rojo si hay uno pendiente.\n"
-                "0.8.7 - Iconos para ejecutables externos y comandos manuales guardados como presets custom.\n\n"
+                "0.8.7 - Iconos para ejecutables externos y comandos manuales guardados como presets custom.\n"
+                "0.8.8 - Estado de preset aplicado separado del preset seleccionado pendiente.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
