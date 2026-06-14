@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.10.3"
+APP_VERSION = "0.10.4"
 APP_REPO = "drbermejor/Proton-Pilot"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
@@ -90,6 +90,8 @@ DEFAULT_APP_CONFIG = {
     "read_only": False,
     "custom_options": [],
     "custom_options_trash": [],
+    "option_category_expanded": {},
+    "language": "es",
 }
 
 OPTION_INFO = {
@@ -248,6 +250,93 @@ LEGACY_OPTION_GROUPS = {
     "Compatibilidad Proton": "Compatibilidad avanzada",
 }
 CUSTOM_OPTION_PREFIX = "CUSTOMOPT:"
+
+OPTION_LABEL_EN = {
+    "GAMEMODE": "Enable GameMode",
+    "MANGOHUD": "Show MangoHud",
+    "HDR": "Enable HDR with Gamescope",
+    "WAYLAND": "Use Proton Wayland",
+    "PROTONHDR": "Enable Proton HDR",
+    "FSR4": "Try FSR 4 upgrade",
+    "FSR4IND": "Show FSR 4 indicator",
+    "GAMESCOPE": "Use Gamescope fullscreen",
+    "REALRES": "Force native resolution in Gamescope",
+    "HANDHELD800P": "Handheld mode 800p",
+    "HANDHELD1200P": "Handheld mode native 1200p",
+    "CAP60": "Limit to 60 FPS",
+    "CAP72": "Limit to 72 FPS",
+    "CAPVRR": "Limit FPS for VRR",
+    "GSFSR": "Scale with Gamescope FSR",
+    "GSNIS": "Scale with Gamescope NIS",
+    "ADAPTIVE": "Enable VRR / Adaptive Sync",
+    "RT": "Force Ray Tracing DXR",
+    "NODXR": "Disable Ray Tracing DXR",
+    "DX12": "Add -dx12",
+    "NVIDIA": "Enable NVIDIA DLSS/NVAPI",
+    "UEHDR": "Force HDR in Unreal Engine",
+}
+
+CATEGORY_LABEL_EN = {
+    "Base y rendimiento": "Base and performance",
+    "Gamescope, pantalla y VRR": "Gamescope, display and VRR",
+    "HDR": "HDR",
+    "Escalado y handheld": "Scaling and handheld",
+    "Compatibilidad avanzada": "Advanced compatibility",
+    "Personalizadas / otros": "Custom / other",
+}
+
+UI_TEXT = {
+    "es": {
+        "version_subtitle": "Version {version} - perfiles de lanzamiento para Steam/Proton",
+        "steam_path": "Ruta Steam",
+        "compact": "Modo compacto",
+        "read_only": "Solo lectura",
+        "games_installed": "1. Juegos instalados",
+        "add_game": "Añadir juego",
+        "edit_manual": "Editar manual",
+        "remove_manual": "Quitar manual",
+        "launch": "Iniciar juego",
+        "tabs": ["Resumen", "Presets", "Opciones", "Avanzado"],
+        "options_box": "Opciones que se aplicaran al lanzamiento",
+        "add_option": "+ Opcion manual",
+        "delete_option": "Papelera",
+        "restore_option": "Restaurar",
+        "save_manual": "Guardar comando manual",
+        "clear_options": "Borrar opciones",
+        "reload": "Recargar",
+        "active": "activas",
+        "recommended": "recomendadas",
+        "options": "opciones",
+        "manual": "manual",
+        "expand": "Abrir",
+        "collapse": "Cerrar",
+    },
+    "en": {
+        "version_subtitle": "Version {version} - Steam/Proton launch profiles",
+        "steam_path": "Steam path",
+        "compact": "Compact mode",
+        "read_only": "Read only",
+        "games_installed": "1. Installed games",
+        "add_game": "Add game",
+        "edit_manual": "Edit manual",
+        "remove_manual": "Remove manual",
+        "launch": "Launch game",
+        "tabs": ["Summary", "Presets", "Options", "Advanced"],
+        "options_box": "Launch options to apply",
+        "add_option": "+ Custom option",
+        "delete_option": "Trash",
+        "restore_option": "Restore",
+        "save_manual": "Save manual command",
+        "clear_options": "Clear options",
+        "reload": "Reload",
+        "active": "active",
+        "recommended": "recommended",
+        "options": "options",
+        "manual": "manual",
+        "expand": "Expand",
+        "collapse": "Collapse",
+    },
+}
 
 
 def z(args, text=None, check=True):
@@ -2251,17 +2340,22 @@ def qt_main():
                     padding: 8px;
                     font-weight: 900;
                 }
-                QGroupBox#optionGroup {
+                QFrame#optionSection {
                     background: #fbfcfd;
-                    border: 1px solid #d5dbe0;
+                    border: 1px solid #ccd5dc;
                     border-radius: 8px;
-                    margin-top: 18px;
-                    padding-top: 12px;
                 }
-                QGroupBox#optionGroup::title {
+                QPushButton#optionSectionHeader {
+                    background: #eef3f7;
+                    border: 0;
+                    border-bottom: 1px solid #ccd5dc;
+                    border-radius: 8px;
+                    padding: 9px 10px;
+                    text-align: left;
                     color: #263238;
                     font-weight: 900;
                 }
+                QPushButton#optionSectionHeader:hover { background: #e4edf3; }
                 """
             )
 
@@ -2280,13 +2374,15 @@ def qt_main():
             title_col = QtWidgets.QVBoxLayout()
             app_title = QtWidgets.QLabel(APP_NAME)
             app_title.setObjectName("appTitle")
-            app_version = QtWidgets.QLabel(f"Version {APP_VERSION} - perfiles de lanzamiento para Steam/Proton")
-            app_version.setObjectName("version")
+            self.app_version_label = QtWidgets.QLabel()
+            self.app_version_label.setObjectName("version")
             title_col.addWidget(app_title)
-            title_col.addWidget(app_version)
+            title_col.addWidget(self.app_version_label)
             hero_layout.addLayout(title_col, 1)
             self.steam_path_btn = QtWidgets.QPushButton("Ruta Steam")
             self.steam_path_btn.setToolTip("Seleccionar manualmente la carpeta raiz de Steam y guardarla para proximas ejecuciones.")
+            self.language_btn = QtWidgets.QPushButton()
+            self.language_btn.setToolTip("Cambiar idioma / Change language")
             self.compact_btn = QtWidgets.QPushButton("Modo compacto")
             self.compact_btn.setCheckable(True)
             self.compact_btn.setChecked(bool(self.app_config.get("compact_mode")))
@@ -2296,6 +2392,7 @@ def qt_main():
             self.read_only_btn.setChecked(bool(self.app_config.get("read_only")))
             self.read_only_btn.setToolTip("Permite revisar juegos, presets y diagnosticos sin escribir cambios en Steam ni en presets.")
             hero_layout.addWidget(self.steam_path_btn)
+            hero_layout.addWidget(self.language_btn)
             hero_layout.addWidget(self.compact_btn)
             hero_layout.addWidget(self.read_only_btn)
             layout.addWidget(hero)
@@ -2324,9 +2421,9 @@ def qt_main():
             splitter.setStretchFactor(1, 1)
             splitter.setSizes([285, 980])
 
-            title = QtWidgets.QLabel("1. Juegos instalados")
-            title.setStyleSheet("font-size: 18px; font-weight: 800;")
-            left.addWidget(title)
+            self.games_title_label = QtWidgets.QLabel("1. Juegos instalados")
+            self.games_title_label.setStyleSheet("font-size: 18px; font-weight: 800;")
+            left.addWidget(self.games_title_label)
             self.game_list = QtWidgets.QListWidget()
             self.game_list.setObjectName("gameList")
             self.game_list.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
@@ -2552,14 +2649,15 @@ def qt_main():
             presets_view.addStretch(1)
 
             opts_box = QtWidgets.QGroupBox("Opciones que se aplicaran al lanzamiento")
+            self.opts_box = opts_box
             opts_layout = QtWidgets.QVBoxLayout(opts_box)
             opts_layout.setContentsMargins(8, 20, 8, 8)
             opts_layout.setSpacing(6)
             option_buttons = QtWidgets.QGridLayout()
             option_buttons.setHorizontalSpacing(6)
-            self.add_option_btn = QtWidgets.QPushButton("Añadir opcion")
+            self.add_option_btn = QtWidgets.QPushButton("+ Opcion manual")
             self.add_option_btn.setToolTip("Crea una opcion manual reutilizable y la coloca en la categoria elegida.")
-            self.delete_option_btn = QtWidgets.QPushButton("Borrar opcion manual")
+            self.delete_option_btn = QtWidgets.QPushButton("Papelera")
             self.delete_option_btn.setToolTip("Mueve una opcion manual a la papelera para poder restaurarla despues.")
             self.restore_option_btn = QtWidgets.QPushButton("Restaurar opcion")
             self.restore_option_btn.setToolTip("Recupera una opcion manual borrada previamente.")
@@ -2654,6 +2752,7 @@ def qt_main():
 
             self.game_list.currentItemChanged.connect(self.select_game)
             self.steam_path_btn.clicked.connect(self.choose_steam_path)
+            self.language_btn.clicked.connect(self.toggle_language)
             self.compact_btn.toggled.connect(self.toggle_compact_mode)
             self.read_only_btn.toggled.connect(self.toggle_read_only)
             self.add_game_btn.clicked.connect(self.add_manual_game)
@@ -2687,9 +2786,14 @@ def qt_main():
             self.save_btn.clicked.connect(self.save)
             self.clear_btn.clicked.connect(self.clear)
             self.reload_btn.clicked.connect(self.reload)
+            self.tabs.currentChanged.connect(self.save_ui_layout_state)
 
+            self.apply_language()
             self.apply_compact_mode()
             self.set_action_availability()
+            selected_tab = int(self.app_config.get("selected_tab", 0) or 0)
+            if 0 <= selected_tab < self.tabs.count():
+                self.tabs.setCurrentIndex(selected_tab)
             if self.game_list.count():
                 self.game_list.setCurrentRow(0)
 
@@ -2698,6 +2802,68 @@ def qt_main():
 
         def steam_config_text(self):
             return self.steam_config_path.read_text(errors="replace")
+
+        def language(self):
+            return "en" if self.app_config.get("language") == "en" else "es"
+
+        def tr(self, key, **kwargs):
+            text = UI_TEXT.get(self.language(), UI_TEXT["es"]).get(key, UI_TEXT["es"].get(key, key))
+            return text.format(**kwargs) if kwargs else text
+
+        def category_label(self, title):
+            if self.language() == "en":
+                return CATEGORY_LABEL_EN.get(title, title)
+            return title
+
+        def option_label(self, key):
+            if self.language() == "en" and key in OPTION_LABEL_EN:
+                return OPTION_LABEL_EN[key]
+            return self.option_meta(key).get("label", key)
+
+        def toggle_language(self):
+            self.app_config["language"] = "en" if self.language() == "es" else "es"
+            save_app_config(self.app_config)
+            selected = set(self.selected_keys()) if getattr(self, "checks", None) else set()
+            self.apply_language()
+            if getattr(self, "options_container_layout", None):
+                self.rebuild_option_checkboxes(selected)
+                self.update_category_headers()
+
+        def apply_language(self):
+            self.app_version_label.setText(self.tr("version_subtitle", version=APP_VERSION))
+            self.language_btn.setText("🇬🇧 English" if self.language() == "en" else "🇪🇸 Español")
+            self.steam_path_btn.setText(self.tr("steam_path"))
+            self.compact_btn.setText(self.tr("compact"))
+            self.read_only_btn.setText(self.tr("read_only"))
+            self.games_title_label.setText(self.tr("games_installed"))
+            self.add_game_btn.setText(self.tr("add_game"))
+            self.edit_game_btn.setText(self.tr("edit_manual"))
+            self.remove_game_btn.setText(self.tr("remove_manual"))
+            self.launch_btn.setText(self.tr("launch"))
+            for index, label in enumerate(self.tr("tabs")):
+                self.tabs.setTabText(index, label)
+            self.opts_box.setTitle(self.tr("options_box"))
+            self.add_option_btn.setText(self.tr("add_option"))
+            self.delete_option_btn.setText(self.tr("delete_option"))
+            self.restore_option_btn.setText(self.tr("restore_option"))
+            self.save_btn.setText(self.tr("save_manual"))
+            self.clear_btn.setText(self.tr("clear_options"))
+            self.reload_btn.setText(self.tr("reload"))
+            if getattr(self, "option_detail", None):
+                self.option_detail.setText(
+                    "Hover an option to see what it does and what it adds to launch."
+                    if self.language() == "en"
+                    else "Pasa el cursor por encima de una opcion para ver que hace y que anade al lanzamiento."
+                )
+
+        def save_ui_layout_state(self):
+            if getattr(self, "tabs", None):
+                self.app_config["selected_tab"] = self.tabs.currentIndex()
+            save_app_config(self.app_config)
+
+        def closeEvent(self, event):
+            self.save_ui_layout_state()
+            super().closeEvent(event)
 
         def choose_steam_path(self):
             path = QtWidgets.QFileDialog.getExistingDirectory(
@@ -2788,9 +2954,13 @@ def qt_main():
                 self.command_edit.setMaximumHeight(54 if compact else 78)
             if getattr(self, "tabs", None):
                 self.tabs.setTabVisible(3, not compact)
-            for group in getattr(self, "option_group_boxes", []):
-                if compact:
-                    group.setChecked(False)
+            if compact:
+                for group_title, widgets in getattr(self, "option_category_widgets", {}).items():
+                    widgets["header"].setChecked(False)
+                    widgets["content"].setVisible(False)
+                    self.app_config.setdefault("option_category_expanded", {})[group_title] = False
+                self.update_category_headers()
+                save_app_config(self.app_config)
             if getattr(self, "current_label", None) and self.current_game:
                 self.current_label.setText(f"Opciones guardadas: {short_command(self.current_game_launch_options(), 150 if compact else 220)}")
 
@@ -3164,6 +3334,7 @@ def qt_main():
                 self.command_edit.setPlainText(current)
             else:
                 self.update_command()
+            self.update_category_headers()
             self.update_dirty_state()
             self.apply_compact_mode()
 
@@ -3540,39 +3711,53 @@ def qt_main():
             self.clear_layout(self.options_container_layout)
             self.checks = {}
             self.option_group_boxes = []
+            self.option_category_widgets = {}
+            self.option_to_group = {}
             custom_by_group = {title: [] for title in OPTION_GROUP_TITLES}
             for option in self.active_custom_options():
                 custom_by_group.setdefault(normalize_option_category(option.get("category")), []).append(option)
 
             for group_index, (group_title, group_keys) in enumerate(OPTION_GROUPS):
-                group = QtWidgets.QGroupBox(group_title)
-                group.setObjectName("optionGroup")
-                group.setCheckable(True)
-                group.setChecked(False if self.app_config.get("compact_mode") else group_index < 2)
-                group_layout = QtWidgets.QVBoxLayout(group)
-                group_layout.setContentsMargins(8, 20, 8, 8)
-                group_layout.setSpacing(5)
+                section = QtWidgets.QFrame()
+                section.setObjectName("optionSection")
+                section_layout = QtWidgets.QVBoxLayout(section)
+                section_layout.setContentsMargins(0, 0, 0, 0)
+                section_layout.setSpacing(0)
+                header = QtWidgets.QPushButton()
+                header.setObjectName("optionSectionHeader")
+                header.setCheckable(True)
                 content = QtWidgets.QWidget()
                 content_layout = QtWidgets.QVBoxLayout(content)
-                content_layout.setContentsMargins(2, 2, 2, 2)
+                content_layout.setContentsMargins(8, 8, 8, 8)
                 content_layout.setSpacing(5)
 
                 for key in group_keys:
-                    self.add_option_checkbox(content_layout, key, key in preserve_checked)
+                    self.add_option_checkbox(content_layout, key, key in preserve_checked, group_title)
                 for option in sorted(custom_by_group.get(group_title, []), key=lambda item: item.get("label", "").lower()):
                     key = custom_option_key(option)
-                    self.add_option_checkbox(content_layout, key, key in preserve_checked)
+                    self.add_option_checkbox(content_layout, key, key in preserve_checked, group_title)
 
-                group_layout.addWidget(content)
-                group.toggled.connect(content.setVisible)
-                content.setVisible(group.isChecked())
-                self.option_group_boxes.append(group)
-                self.options_container_layout.addWidget(group)
+                section_layout.addWidget(header)
+                section_layout.addWidget(content)
+                expanded_config = self.app_config.setdefault("option_category_expanded", {})
+                if group_title in expanded_config:
+                    expanded = bool(expanded_config[group_title])
+                elif self.app_config.get("compact_mode"):
+                    expanded = False
+                else:
+                    expanded = group_index < 2
+                header.setChecked(expanded)
+                content.setVisible(expanded)
+                header.clicked.connect(lambda checked=False, g=group_title: self.toggle_option_category(g))
+                self.option_category_widgets[group_title] = {"section": section, "header": header, "content": content}
+                self.option_group_boxes.append(section)
+                self.options_container_layout.addWidget(section)
             self.options_container_layout.addStretch(1)
+            self.update_category_headers()
 
-        def add_option_checkbox(self, layout, key, checked=False):
+        def add_option_checkbox(self, layout, key, checked=False, group_title=""):
             meta = self.option_meta(key)
-            label = meta["label"]
+            label = self.option_label(key)
             recommended = meta.get("recommended", False)
             important = meta.get("important", False)
             caution = meta.get("caution", False)
@@ -3603,7 +3788,39 @@ def qt_main():
             cb.stateChanged.connect(self.update_command)
             cb.clicked.connect(lambda checked=False, k=key: self.show_option_detail(k))
             self.checks[key] = cb
+            if group_title:
+                self.option_to_group[key] = group_title
             layout.addWidget(cb)
+
+        def toggle_option_category(self, group_title):
+            item = self.option_category_widgets.get(group_title)
+            if not item:
+                return
+            expanded = item["header"].isChecked()
+            item["content"].setVisible(expanded)
+            self.app_config.setdefault("option_category_expanded", {})[group_title] = bool(expanded)
+            save_app_config(self.app_config)
+            self.update_category_headers()
+
+        def update_category_headers(self):
+            if not getattr(self, "option_category_widgets", None):
+                return
+            selected = set(self.selected_keys())
+            for group_title, widgets in self.option_category_widgets.items():
+                keys = [key for key, group in self.option_to_group.items() if group == group_title]
+                total = len(keys)
+                active = sum(1 for key in keys if key in selected)
+                recommended = sum(1 for key in keys if key in self.system_recommended)
+                manual = sum(1 for key in keys if is_custom_option_key(key))
+                expanded = widgets["header"].isChecked()
+                arrow = "▾" if expanded else "▸"
+                bits = [f"{active} {self.tr('active')} / {total} {self.tr('options')}"]
+                if recommended:
+                    bits.append(f"{recommended} {self.tr('recommended')}")
+                if manual:
+                    bits.append(f"{manual} {self.tr('manual')}")
+                widgets["header"].setText(f"{arrow} {self.category_label(group_title)} · " + " · ".join(bits))
+                widgets["header"].setToolTip(self.tr("collapse") if expanded else self.tr("expand"))
 
         def custom_option_dialog(self):
             dialog = QtWidgets.QDialog(self)
@@ -3616,7 +3833,7 @@ def qt_main():
             name_edit.setPlaceholderText("Ej: Proton log, RADV RT, Flag experimental...")
             category_combo = NoWheelComboBox()
             for title in OPTION_GROUP_TITLES:
-                category_combo.addItem(title, title)
+                category_combo.addItem(self.category_label(title), title)
             style_combo = NoWheelComboBox()
             style_combo.addItem("Normal", "normal")
             style_combo.addItem("Importante / amarillo", "important")
@@ -3824,6 +4041,7 @@ def qt_main():
                 self.active_custom_options(),
             )
             self.command_edit.setPlainText(command)
+            self.update_category_headers()
 
         def gamescope_resolution(self):
             return dict(self.active_gamescope_res)
@@ -4638,6 +4856,7 @@ def qt_main():
 
         def show_about(self):
             history = [
+                ("0.10.4", "Acordeon de opciones sin recuadros vacios, disposicion abierta persistente, selector de idioma y documentacion EN/ES."),
                 ("0.10.3", "Categorias orientadas a objetivos y titulos de opciones con verbos mas claros."),
                 ("0.10.2", "Opciones manuales por categorias con papelera/restauracion, Acerca de desplazable, tabs sin rueda y modo compacto mas estricto."),
                 ("0.10.1", "Buscar actualizacion tolera repos sin releases y los recuadros ganan espacio para no pisar texto."),
