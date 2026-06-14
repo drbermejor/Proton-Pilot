@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.9.0"
+APP_VERSION = "0.9.1"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -1041,6 +1041,12 @@ def compat_tool_display_name(tool_name, tools):
     return tool_name
 
 
+def compact_proton_label(label):
+    label = re.sub(r"^\d+\s+", "", str(label or "")).strip()
+    label = label.replace(" (steam linux runtime)", " SLR")
+    return label
+
+
 def compat_tool_block(appid, tool_name, indent):
     child = indent + "\t"
     escaped = escape_vdf(tool_name)
@@ -1838,7 +1844,7 @@ def qt_main():
             super().__init__()
             self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
             self.resize(1320, 780)
-            self.setMinimumSize(1050, 600)
+            self.setMinimumSize(900, 560)
             self.app_icon = first_existing(APP_ICON_CANDIDATES)
             if self.app_icon:
                 self.setWindowIcon(QtGui.QIcon(str(self.app_icon)))
@@ -2108,8 +2114,8 @@ def qt_main():
             left = QtWidgets.QVBoxLayout()
             left_panel = QtWidgets.QWidget()
             left_panel.setLayout(left)
-            left_panel.setMinimumWidth(260)
-            left_panel.setMaximumWidth(360)
+            left_panel.setMinimumWidth(220)
+            left_panel.setMaximumWidth(320)
             top.addWidget(left_panel)
             right_scroll = QtWidgets.QScrollArea()
             right_scroll.setWidgetResizable(True)
@@ -2165,19 +2171,24 @@ def qt_main():
             self.current_label.setObjectName("gameCommand")
             self.current_label.setWordWrap(True)
             game_info_layout.addWidget(self.current_label)
-            proton_row = QtWidgets.QHBoxLayout()
+            proton_row = QtWidgets.QGridLayout()
+            proton_row.setHorizontalSpacing(6)
+            proton_row.setVerticalSpacing(6)
             self.proton_status_label = QtWidgets.QLabel("Proton: sin detectar")
             self.proton_status_label.setWordWrap(True)
             self.proton_combo = NoWheelComboBox()
             self.proton_combo.setToolTip("Selecciona la version de Proton que Steam usara para este juego. Steam por defecto elimina el forzado por juego.")
+            self.proton_combo.setMinimumContentsLength(18)
+            self.proton_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
             self.recommend_proton_btn = QtWidgets.QPushButton("Recomendada")
             self.recommend_proton_btn.setToolTip("Selecciona la version de Proton que Proton Pilot recomienda entre las instaladas.")
             self.apply_proton_btn = QtWidgets.QPushButton("Aplicar Proton")
             self.apply_proton_btn.setToolTip("Guarda la version de Proton elegida para este juego cerrando Steam si hace falta.")
-            proton_row.addWidget(self.proton_status_label, 1)
-            proton_row.addWidget(self.proton_combo, 1)
-            proton_row.addWidget(self.recommend_proton_btn)
-            proton_row.addWidget(self.apply_proton_btn)
+            proton_row.addWidget(self.proton_status_label, 0, 0, 1, 3)
+            proton_row.addWidget(self.proton_combo, 1, 0)
+            proton_row.addWidget(self.recommend_proton_btn, 1, 1)
+            proton_row.addWidget(self.apply_proton_btn, 1, 2)
+            proton_row.setColumnStretch(0, 1)
             game_info_layout.addLayout(proton_row)
             self.dirty_label = QtWidgets.QLabel("Sin cambios pendientes.")
             self.dirty_label.setObjectName("dirtyStatus")
@@ -2240,10 +2251,12 @@ def qt_main():
             )
             cards.addWidget(status_card("Sistema", f"{self.system['os'].get('name') or 'OS'} · {self.system['session'].get('type') or 'sesion'}"), 0, 0)
             cards.addWidget(status_card("Pantalla", display_value, "good" if display.get("width") else "warn"), 0, 1)
-            cards.addWidget(status_card("HDR sistema", hdr_value, hdr_state), 0, 2)
-            cards.addWidget(status_card("VRR", vrr_value, vrr_state), 1, 0)
-            cards.addWidget(status_card("GPU", self.system["gpu_name"], "neutral"), 1, 1)
-            cards.addWidget(status_card("Herramientas", tools_value, "good"), 1, 2)
+            cards.addWidget(status_card("HDR sistema", hdr_value, hdr_state), 1, 0)
+            cards.addWidget(status_card("VRR", vrr_value, vrr_state), 1, 1)
+            cards.addWidget(status_card("GPU", self.system["gpu_name"], "neutral"), 2, 0)
+            cards.addWidget(status_card("Herramientas", tools_value, "good"), 2, 1)
+            cards.setColumnStretch(0, 1)
+            cards.setColumnStretch(1, 1)
             sys_layout.addLayout(cards)
             sys_reasons = QtWidgets.QLabel("\n".join(f"- {r}" for r in recommendation_reasons(self.system)) or "No hay recomendaciones automaticas.")
             sys_reasons.setWordWrap(True)
@@ -2251,7 +2264,9 @@ def qt_main():
             overview.addWidget(sys_box)
 
             action_box = QtWidgets.QGroupBox("Acciones y recomendaciones")
-            action_layout = QtWidgets.QHBoxLayout(action_box)
+            action_layout = QtWidgets.QGridLayout(action_box)
+            action_layout.setHorizontalSpacing(6)
+            action_layout.setVerticalSpacing(6)
             self.recommend_btn = QtWidgets.QPushButton("Recomendaciones")
             self.open_protondb_btn = QtWidgets.QPushButton("Abrir ProtonDB")
             self.apply_system_btn = QtWidgets.QPushButton("Marcar recomendadas")
@@ -2263,22 +2278,32 @@ def qt_main():
             self.history_btn = QtWidgets.QPushButton("Historial")
             self.history_btn.setToolTip("Muestra comandos anteriores guardados para este juego y permite restaurarlos.")
             self.about_btn = QtWidgets.QPushButton("Acerca de")
-            action_layout.addWidget(self.recommend_btn)
-            action_layout.addWidget(self.open_protondb_btn)
-            action_layout.addWidget(self.apply_system_btn)
-            action_layout.addWidget(self.assistant_btn)
-            action_layout.addWidget(self.compare_btn)
-            action_layout.addWidget(self.history_btn)
-            action_layout.addWidget(self.about_btn)
-            action_layout.addStretch(1)
+            for idx, button in enumerate(
+                [
+                    self.recommend_btn,
+                    self.open_protondb_btn,
+                    self.apply_system_btn,
+                    self.assistant_btn,
+                    self.compare_btn,
+                    self.history_btn,
+                    self.about_btn,
+                ]
+            ):
+                action_layout.addWidget(button, idx // 4, idx % 4)
+            for col in range(4):
+                action_layout.setColumnStretch(col, 1)
             overview.addWidget(action_box)
             overview.addStretch(1)
 
             preset_box = QtWidgets.QGroupBox("Presets del juego")
             preset_layout = QtWidgets.QVBoxLayout(preset_box)
-            preset_row = QtWidgets.QHBoxLayout()
+            preset_row = QtWidgets.QGridLayout()
+            preset_row.setHorizontalSpacing(6)
+            preset_row.setVerticalSpacing(6)
             self.preset_combo = NoWheelComboBox()
             self.preset_combo.setToolTip("Selecciona un preset para cargar automaticamente sus opciones en pantalla. La rueda del raton no cambia este selector.")
+            self.preset_combo.setMinimumContentsLength(22)
+            self.preset_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
             self.apply_preset_btn = QtWidgets.QPushButton("Aplicar preset")
             self.apply_preset_btn.setToolTip("Guarda el preset seleccionado como opciones de lanzamiento del juego, con confirmacion.")
             self.apply_preset_btn.setEnabled(False)
@@ -2286,11 +2311,13 @@ def qt_main():
             self.save_preset_btn.setToolTip("Crea un preset compartido disponible para cualquier juego.")
             self.update_preset_btn = QtWidgets.QPushButton("Actualizar preset")
             self.delete_preset_btn = QtWidgets.QPushButton("Borrar preset")
-            preset_row.addWidget(self.preset_combo, 1)
-            preset_row.addWidget(self.apply_preset_btn)
-            preset_row.addWidget(self.save_preset_btn)
-            preset_row.addWidget(self.update_preset_btn)
-            preset_row.addWidget(self.delete_preset_btn)
+            preset_row.addWidget(self.preset_combo, 0, 0, 1, 4)
+            preset_row.addWidget(self.apply_preset_btn, 1, 0)
+            preset_row.addWidget(self.save_preset_btn, 1, 1)
+            preset_row.addWidget(self.update_preset_btn, 1, 2)
+            preset_row.addWidget(self.delete_preset_btn, 1, 3)
+            for col in range(4):
+                preset_row.setColumnStretch(col, 1)
             preset_layout.addLayout(preset_row)
             self.preset_choice_label = QtWidgets.QLabel("Selecciona un preset para cargarlo.")
             self.preset_choice_label.setObjectName("presetChoiceStatus")
@@ -2343,7 +2370,9 @@ def qt_main():
             options_view.addWidget(self.option_detail)
 
             res_box = QtWidgets.QGroupBox("Resolucion Gamescope")
-            res_layout = QtWidgets.QHBoxLayout(res_box)
+            res_layout = QtWidgets.QGridLayout(res_box)
+            res_layout.setHorizontalSpacing(6)
+            res_layout.setVerticalSpacing(6)
             self.real_width = NoWheelSpinBox()
             self.real_width.setRange(0, 10000)
             self.real_width.setSuffix(" px")
@@ -2359,14 +2388,16 @@ def qt_main():
             self.apply_resolution_btn.setToolTip("Usa los valores de ancho/alto/Hz en el comando Gamescope y activa Resolucion real Gamescope.")
             self.detect_display_btn = QtWidgets.QPushButton("Usar monitor principal")
             self.detect_display_btn.setToolTip("Detecta el monitor principal, rellena la resolucion y la aplica al comando Gamescope.")
-            res_layout.addWidget(QtWidgets.QLabel("Ancho"))
-            res_layout.addWidget(self.real_width)
-            res_layout.addWidget(QtWidgets.QLabel("Alto"))
-            res_layout.addWidget(self.real_height)
-            res_layout.addWidget(QtWidgets.QLabel("Hz"))
-            res_layout.addWidget(self.real_refresh)
-            res_layout.addWidget(self.apply_resolution_btn)
-            res_layout.addWidget(self.detect_display_btn)
+            res_layout.addWidget(QtWidgets.QLabel("Ancho"), 0, 0)
+            res_layout.addWidget(self.real_width, 0, 1)
+            res_layout.addWidget(QtWidgets.QLabel("Alto"), 0, 2)
+            res_layout.addWidget(self.real_height, 0, 3)
+            res_layout.addWidget(QtWidgets.QLabel("Hz"), 0, 4)
+            res_layout.addWidget(self.real_refresh, 0, 5)
+            res_layout.addWidget(self.apply_resolution_btn, 1, 0, 1, 3)
+            res_layout.addWidget(self.detect_display_btn, 1, 3, 1, 3)
+            for col in (1, 3, 5):
+                res_layout.setColumnStretch(col, 1)
             advanced.addWidget(res_box)
 
             custom_box = QtWidgets.QGroupBox("Ajustes personalizados")
@@ -2514,15 +2545,16 @@ def qt_main():
                 return
             current = self.current_game_compat_tool()
             recommended = recommended_proton_tool(self.system, self.proton_tools)
-            current_label = compat_tool_display_name(current, self.proton_tools)
-            rec_label = compat_tool_display_name(recommended, self.proton_tools) if recommended else "sin recomendacion"
+            current_label = compact_proton_label(compat_tool_display_name(current, self.proton_tools))
+            rec_label = compact_proton_label(compat_tool_display_name(recommended, self.proton_tools)) if recommended else "sin recomendacion"
             self.proton_status_label.setText(f"Proton actual: {current_label}\nRecomendada: {rec_label}")
             self.proton_combo.addItem("Steam por defecto", "")
             if current and not any(tool["compat"] == current for tool in self.proton_tools):
                 self.proton_combo.addItem(f"Actual no detectada: {current}", current)
             for tool in self.proton_tools:
                 suffix = "  - recomendada" if tool["compat"] == recommended else ""
-                version = f" ({tool['version']})" if tool.get("version") else ""
+                version = compact_proton_label(tool.get("version", ""))
+                version = f" ({version})" if version and version != tool["name"] else ""
                 self.proton_combo.addItem(f"{tool['name']}{version}{suffix}", tool["compat"])
             index = self.proton_combo.findData(current)
             self.proton_combo.setCurrentIndex(index if index >= 0 else 0)
@@ -3762,7 +3794,8 @@ def qt_main():
                 "0.8.7 - Iconos para ejecutables externos y comandos manuales guardados como presets custom.\n"
                 "0.8.8 - Estado de preset aplicado separado del preset seleccionado pendiente.\n"
                 "0.8.9 - Cambios pendientes, comparar, diagnostico, historial y asistente de perfil.\n"
-                "0.9.0 - Gestion de Proton por juego, recomendaciones, pestanas y builder AppImage.\n\n"
+                "0.9.0 - Gestion de Proton por juego, recomendaciones, pestanas y builder AppImage.\n"
+                "0.9.1 - Layout responsive para evitar cortes en pantallas mas estrechas.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
