@@ -52,6 +52,21 @@ class ProtonPilotLogicTests(unittest.TestCase):
         self.assertFalse(proton_pilot.is_newer_version("0.10.1", "0.10.2"))
         self.assertFalse(proton_pilot.is_newer_version("0.10.2", "0.10.2"))
 
+    def test_launch_option_categories_are_goal_oriented(self):
+        self.assertEqual(
+            proton_pilot.OPTION_GROUP_TITLES,
+            [
+                "Base y rendimiento",
+                "Gamescope, pantalla y VRR",
+                "HDR",
+                "Escalado y handheld",
+                "Compatibilidad avanzada",
+                "Personalizadas / otros",
+            ],
+        )
+        self.assertEqual(proton_pilot.normalize_option_category("Pantalla, HDR y Gamescope"), "Gamescope, pantalla y VRR")
+        self.assertEqual(proton_pilot.normalize_option_category("Categoria rara"), "Personalizadas / otros")
+
     def test_detect_gamescope_resolution(self):
         command = "gamescope -f --force-windows-fullscreen -W 2560 -H 1440 -w 2560 -h 1440 -r 180 -- %command%"
 

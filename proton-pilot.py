@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.10.2"
+APP_VERSION = "0.10.3"
 APP_REPO = "drbermejor/Proton-Pilot"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
@@ -94,133 +94,133 @@ DEFAULT_APP_CONFIG = {
 
 OPTION_INFO = {
     "GAMEMODE": {
-        "label": "GameMode",
+        "label": "Activar GameMode",
         "description": "Activa GameMode para pedir al sistema perfil de rendimiento mientras el juego esta abierto.",
         "tokens": "gamemoderun",
         "recommended": True,
     },
     "MANGOHUD": {
-        "label": "MangoHud",
+        "label": "Mostrar MangoHud",
         "description": "Muestra overlay de FPS, frametime, GPU/CPU y temperaturas. Con Gamescope se aplica como --mangoapp. Atajo ingame: Shift derecho + F12 muestra u oculta el overlay.",
         "tokens": "mangohud o gamescope --mangoapp",
         "recommended": True,
     },
     "HDR": {
-        "label": "HDR via Gamescope",
+        "label": "Activar HDR con Gamescope",
         "description": "Activa salida HDR dentro de Gamescope y expone HDR a DXVK con ENABLE_GAMESCOPE_WSI=1 y DXVK_HDR=1. Necesita que Gamescope HDR/WSI este disponible.",
         "tokens": "ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope --hdr-enabled",
         "recommended": False,
         "important": True,
     },
     "WAYLAND": {
-        "label": "Wine/Proton Wayland",
+        "label": "Usar Proton Wayland",
         "description": "Fuerza el driver Wayland de Wine/Proton. Puede mejorar integracion en Wayland, pero en algunos juegos rompe overlay o entrada.",
         "tokens": "PROTON_ENABLE_WAYLAND=1",
         "recommended": False,
     },
     "PROTONHDR": {
-        "label": "Proton HDR flag",
+        "label": "Activar HDR de Proton",
         "description": "Activa el flag HDR propio de Proton si tu build lo soporta. Complementa, no sustituye, Gamescope HDR.",
         "tokens": "PROTON_ENABLE_HDR=1",
         "recommended": False,
         "important": True,
     },
     "FSR4": {
-        "label": "FSR4 upgrade",
+        "label": "Intentar upgrade a FSR 4",
         "description": "Intenta actualizar FSR 3.1 a FSR 4 en builds Proton/GE/Cachy que lo soportan. Requiere juego compatible y GPU/driver adecuados; no es universal.",
         "tokens": "PROTON_FSR4_UPGRADE=1",
         "recommended": False,
     },
     "FSR4IND": {
-        "label": "FSR4 indicador",
+        "label": "Mostrar indicador FSR 4",
         "description": "Muestra un indicador/overlay para comprobar si el upgrade FSR4 esta funcionando, si tu Proton lo soporta.",
         "tokens": "PROTON_FSR4_INDICATOR=1",
         "recommended": False,
     },
     "GAMESCOPE": {
-        "label": "Gamescope fullscreen",
+        "label": "Usar Gamescope a pantalla completa",
         "description": "Mete el juego dentro de Gamescope a pantalla completa. Es el contenedor/compositor: habilita HDR, VRR, escalado y control de pantalla. Por si solo no fuerza una resolucion concreta.",
         "tokens": "gamescope -f --",
         "recommended": False,
         "important": True,
     },
     "REALRES": {
-        "label": "Resolucion real Gamescope",
+        "label": "Forzar resolucion nativa en Gamescope",
         "description": "Anade -W/-H/-w/-h/-r para que Gamescope exponga al juego la resolucion y Hz reales del monitor. Requiere Gamescope; es el ajuste de modo/resolucion, no el contenedor.",
         "tokens": "gamescope -W <monitor_w> -H <monitor_h> -w <game_w> -h <game_h> -r <hz>",
         "recommended": False,
         "important": True,
     },
     "HANDHELD800P": {
-        "label": "Handheld 800p",
+        "label": "Modo portatil 800p",
         "description": "Ejecuta el juego a 1280x800 dentro de Gamescope. Perfil util para Legion Go 2, SteamOS/Bazzite y juegos pesados.",
         "tokens": "gamescope -f -w 1280 -h 800 --",
         "recommended": False,
     },
     "HANDHELD1200P": {
-        "label": "Handheld 1200p nativo",
+        "label": "Modo portatil 1200p nativo",
         "description": "Ejecuta el juego a 1920x1200 dentro de Gamescope, pensado para la pantalla 16:10 de Legion Go 2.",
         "tokens": "gamescope -f -w 1920 -h 1200 --",
         "recommended": False,
     },
     "CAP60": {
-        "label": "Limite 60 FPS",
+        "label": "Limitar a 60 FPS",
         "description": "Anade limite simple de 60 FPS en Gamescope para bajar consumo y estabilizar frametime.",
         "tokens": "gamescope --framerate-limit 60",
         "recommended": False,
     },
     "CAP72": {
-        "label": "Limite 72 FPS",
+        "label": "Limitar a 72 FPS",
         "description": "Anade limite simple de 72 FPS en Gamescope. Encaja bien con pantallas de 144 Hz al dividir por dos.",
         "tokens": "gamescope --framerate-limit 72",
         "recommended": False,
     },
     "CAPVRR": {
-        "label": "VRR cap automatico",
+        "label": "Limitar FPS para VRR",
         "description": "Limita FPS unos pocos frames por debajo de los Hz aplicados para evitar tocar el techo VRR. Usa MangoHud porque Gamescope redondea su limitador a divisores del refresco.",
         "tokens": "MANGOHUD_CONFIG=fps_limit=<Hz-3> mangohud",
         "recommended": False,
         "caution": True,
     },
     "GSFSR": {
-        "label": "Escalado Gamescope FSR",
+        "label": "Escalar con FSR de Gamescope",
         "description": "Usa el escalador FSR 1.0 de Gamescope para subir desde una resolucion menor. No es FSR2/3/4 del juego.",
         "tokens": "gamescope -F fsr --sharpness 5",
         "recommended": False,
     },
     "GSNIS": {
-        "label": "Escalado Gamescope NIS",
+        "label": "Escalar con NIS de Gamescope",
         "description": "Usa NVIDIA Image Scaling en Gamescope. Puede gustar mas o menos que FSR segun juego/pantalla.",
         "tokens": "gamescope -F nis --sharpness 5",
         "recommended": False,
     },
     "ADAPTIVE": {
-        "label": "Adaptive Sync",
+        "label": "Activar VRR / Adaptive Sync",
         "description": "Pide VRR/Adaptive Sync a Gamescope si tu pantalla y sesion lo soportan.",
         "tokens": "gamescope --adaptive-sync",
         "recommended": False,
         "caution": True,
     },
     "RT": {
-        "label": "Ray Tracing DXR",
+        "label": "Forzar Ray Tracing DXR",
         "description": "Fuerza DXR en VKD3D-Proton incluso si se considera inseguro. Hoy DXR suele activarse solo; usalo si el juego no lo expone.",
         "tokens": "VKD3D_CONFIG=dxr",
         "recommended": False,
     },
     "NODXR": {
-        "label": "Desactivar DXR",
+        "label": "Desactivar Ray Tracing DXR",
         "description": "Desactiva DXR en VKD3D-Proton. Util si el ray tracing causa cuelgues, glitches o bajones fuertes.",
         "tokens": "VKD3D_CONFIG=nodxr",
         "recommended": False,
     },
     "DX12": {
-        "label": "Forzar DX12 (-dx12)",
+        "label": "Anadir -dx12",
         "description": "Anade -dx12 despues de %command%. Solo algunos juegos o motores lo reconocen.",
         "tokens": "%command% -dx12",
         "recommended": False,
     },
     "NVIDIA": {
-        "label": "NVIDIA NVAPI/DLSS",
+        "label": "Activar NVIDIA DLSS/NVAPI",
         "description": "Solo para NVIDIA: expone NVAPI/DLSS/NGX al juego. En AMD normalmente no conviene.",
         "tokens": "PROTON_ENABLE_NVAPI=1 PROTON_HIDE_NVIDIA_GPU=0 PROTON_ENABLE_NGX_UPDATER=1",
         "recommended": False,
@@ -234,12 +234,19 @@ OPTION_INFO = {
 }
 
 OPTION_GROUPS = [
-    ("Rendimiento y monitorizacion", ("GAMEMODE", "MANGOHUD", "CAPVRR", "CAP60", "CAP72")),
-    ("Pantalla, HDR y Gamescope", ("GAMESCOPE", "REALRES", "HDR", "PROTONHDR", "ADAPTIVE")),
+    ("Base y rendimiento", ("GAMEMODE", "MANGOHUD", "DX12", "FSR4", "FSR4IND")),
+    ("Gamescope, pantalla y VRR", ("GAMESCOPE", "REALRES", "ADAPTIVE", "CAPVRR", "CAP60", "CAP72")),
+    ("HDR", ("HDR", "PROTONHDR", "UEHDR")),
     ("Escalado y handheld", ("HANDHELD800P", "HANDHELD1200P", "GSFSR", "GSNIS")),
-    ("Compatibilidad Proton", ("WAYLAND", "FSR4", "FSR4IND", "RT", "NODXR", "DX12", "NVIDIA", "UEHDR")),
+    ("Compatibilidad avanzada", ("WAYLAND", "RT", "NODXR", "NVIDIA")),
+    ("Personalizadas / otros", ()),
 ]
 OPTION_GROUP_TITLES = [title for title, _keys in OPTION_GROUPS]
+LEGACY_OPTION_GROUPS = {
+    "Rendimiento y monitorizacion": "Base y rendimiento",
+    "Pantalla, HDR y Gamescope": "Gamescope, pantalla y VRR",
+    "Compatibilidad Proton": "Compatibilidad avanzada",
+}
 CUSTOM_OPTION_PREFIX = "CUSTOMOPT:"
 
 
@@ -437,6 +444,12 @@ def custom_option_matches_command(option, command):
     command = str(command or "")
     tokens = custom_option_tokens(option)
     return bool(tokens) and all(token in command for token in tokens)
+
+
+def normalize_option_category(category):
+    category = str(category or "").strip()
+    category = LEGACY_OPTION_GROUPS.get(category, category)
+    return category if category in OPTION_GROUP_TITLES else OPTION_GROUP_TITLES[-1]
 
 
 def launch_commands_equivalent(first, second):
@@ -3529,7 +3542,7 @@ def qt_main():
             self.option_group_boxes = []
             custom_by_group = {title: [] for title in OPTION_GROUP_TITLES}
             for option in self.active_custom_options():
-                custom_by_group.setdefault(option.get("category") or OPTION_GROUP_TITLES[-1], []).append(option)
+                custom_by_group.setdefault(normalize_option_category(option.get("category")), []).append(option)
 
             for group_index, (group_title, group_keys) in enumerate(OPTION_GROUPS):
                 group = QtWidgets.QGroupBox(group_title)
@@ -3650,7 +3663,7 @@ def qt_main():
             return {
                 "id": f"{slugify_option_label(label)}-{stamp}",
                 "label": label,
-                "category": category_combo.currentData(),
+                "category": normalize_option_category(category_combo.currentData()),
                 "style": style_combo.currentData(),
                 "description": description.toPlainText().strip(),
                 "pre": pre,
@@ -4625,6 +4638,7 @@ def qt_main():
 
         def show_about(self):
             history = [
+                ("0.10.3", "Categorias orientadas a objetivos y titulos de opciones con verbos mas claros."),
                 ("0.10.2", "Opciones manuales por categorias con papelera/restauracion, Acerca de desplazable, tabs sin rueda y modo compacto mas estricto."),
                 ("0.10.1", "Buscar actualizacion tolera repos sin releases y los recuadros ganan espacio para no pisar texto."),
                 ("0.10.0", "Modo compacto, solo lectura, panel redimensionable, diagnostico HDR/VRR, historial Proton y acciones AppImage/update."),

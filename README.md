@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.10.2
+Version: 0.10.3
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -384,12 +384,17 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
 - External executable icons are extracted from the `.exe` when `icoutils` is
   installed; otherwise Proton Pilot falls back to the generic icon.
 - Launch options are displayed as a vertical list so each option is easier to scan.
+- Built-in launch options use action-oriented labels such as `Activar GameMode`,
+  `Forzar resolucion nativa en Gamescope`, or `Limitar FPS para VRR`.
 - `Añadir opcion` opens a wizard for creating reusable user-defined toggles. Each
   custom option can add parameters before `%command%`, Gamescope arguments, and
   parameters after `%command%`.
-- User-defined launch options live in the same categories as built-in options.
-  `Borrar opcion manual` moves them to a trash list, and `Restaurar opcion`
-  brings them back later.
+- Launch options are grouped by goal: `Base y rendimiento`,
+  `Gamescope, pantalla y VRR`, `HDR`, `Escalado y handheld`,
+  `Compatibilidad avanzada`, and `Personalizadas / otros`.
+- User-defined launch options live in those same categories. `Borrar opcion
+  manual` moves them to a trash list, and `Restaurar opcion` brings them back
+  later.
 - `Guardar comando manual` is highlighted in green. It is meant for cases where
   you edit the `Comando final` text directly; Proton Pilot will offer to create
   a per-game custom preset for that exact command.
@@ -428,8 +433,7 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
 - If multiple presets generate the same launch command, Proton Pilot remembers
   the exact preset you applied for that game and selects it again when you
   return to the game.
-- Launch options are grouped into collapsible sections: performance, display/HDR,
-  handheld scaling, and Proton compatibility.
+- Launch options are grouped into collapsible goal-oriented sections.
 - The `Resumen/Presets/Opciones/Avanzado` tab bar ignores mouse-wheel events so
   scrolling over the tab bar no longer changes tabs by accident.
 
@@ -593,3 +597,6 @@ support or game-specific configuration.
 - 0.10.2: Adds reusable user-defined launch option toggles with category
   placement, delete/restore support, a scrollable newest-first About dialog,
   tab bars that ignore mouse-wheel changes, and a stricter compact mode.
+- 0.10.3: Renames launch options with clearer action-oriented labels and
+  reorganizes categories around user goals: performance, Gamescope/display/VRR,
+  HDR, handheld/scaling, advanced compatibility, and custom options.
