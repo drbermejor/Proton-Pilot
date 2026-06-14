@@ -120,6 +120,35 @@ class ProtonPilotLogicTests(unittest.TestCase):
             data = proton_pilot.load_shortcuts(added["path"])
             self.assertEqual(data["shortcuts"]["0"]["LaunchOptions"], "gamemoderun %command%")
 
+    def test_compat_tool_mapping_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.vdf"
+            config.write_text(
+                '"InstallConfigStore"\n{\n\t"Software"\n\t{\n\t\t"Valve"\n\t\t{\n\t\t\t"Steam"\n\t\t\t{\n\t\t\t\t"CompatToolMapping"\n\t\t\t\t{\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t}\n}\n'
+            )
+
+            proton_pilot.set_compat_tool(config, "1172710", "GE-Proton10-34")
+            text = config.read_text()
+            self.assertEqual(proton_pilot.current_compat_tool(text, "1172710"), "GE-Proton10-34")
+
+            proton_pilot.set_compat_tool(config, "1172710", "")
+            text = config.read_text()
+            self.assertEqual(proton_pilot.current_compat_tool(text, "1172710"), "")
+
+    def test_recommends_cachy_proton_on_cachyos(self):
+        system = {
+            "os": {"id": "cachyos", "name": "CachyOS"},
+            "gpu": "amd",
+            "session": {"type": "wayland"},
+            "display": {"hdr": "enabled"},
+        }
+        tools = [
+            {"name": "GE-Proton10-34", "compat": "GE-Proton10-34"},
+            {"name": "proton-cachyos-11.0", "compat": "proton-cachyos-slr"},
+        ]
+
+        self.assertEqual(proton_pilot.recommended_proton_tool(system, tools), "proton-cachyos-slr")
+
     def test_external_icon_cache_path_is_stable_per_exe(self):
         first = proton_pilot.external_icon_cache_path(Path("/games/One/Game.exe"))
         second = proton_pilot.external_icon_cache_path(Path("/games/One/Game.exe"))

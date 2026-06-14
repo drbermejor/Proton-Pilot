@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.9"
+APP_VERSION = "0.9.0"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -684,6 +684,29 @@ def vdf_value(text, key):
     return unescape_vdf(match.group(1)) if match else ""
 
 
+def find_named_block(text, key):
+    match = re.search(rf'\n(?P<indent>[ \t]*)"{re.escape(key)}"\s*\n[ \t]*{{', text)
+    if not match:
+        match = re.search(rf'^(?P<indent>[ \t]*)"{re.escape(key)}"\s*\n[ \t]*{{', text)
+    if not match:
+        return None
+    open_pos = text.find("{", match.end() - 1)
+    depth = 0
+    for i in range(open_pos, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return {
+                    "key_start": match.start() + (0 if match.start() == 0 else 1),
+                    "block_start": open_pos,
+                    "block_end": i + 1,
+                    "indent": match.group("indent"),
+                }
+    return None
+
+
 def valid_steam_root(path):
     root = Path(path).expanduser() if path else None
     return bool(root and root.exists() and (root / "steamapps").exists())
@@ -868,9 +891,40 @@ def external_game_id(name, exe):
     return f"external-{digest}"
 
 
+def compatibility_tool_metadata(path):
+    compat = path / "compatibilitytool.vdf"
+    manifest = path / "toolmanifest.vdf"
+    internal = ""
+    display = ""
+    if compat.exists():
+        text = compat.read_text(errors="replace")
+        match = re.search(r'"compat_tools"\s*\{[\s\S]*?\n[ \t]*"([^"]+)"\s*(?://[^\n]*)?\n[ \t]*\{', text)
+        if match:
+            internal = match.group(1)
+        display = vdf_value(text, "display_name")
+    if not internal:
+        if path.name == "Proton - Experimental":
+            internal = "proton_experimental"
+        elif path.name == "Proton Hotfix":
+            internal = "proton_hotfix"
+        else:
+            internal = path.name
+    if not display:
+        display = path.name
+    version = ""
+    version_file = path / "version"
+    if version_file.exists():
+        version = " ".join(version_file.read_text(errors="replace").split())
+    layer = ""
+    if manifest.exists():
+        layer = vdf_value(manifest.read_text(errors="replace"), "compatmanager_layer_name")
+    return {"name": display, "compat": internal, "path": str(path / "proton"), "version": version, "layer": layer}
+
+
 def proton_tools(root):
     tools = []
-    seen = set()
+    seen_paths = set()
+    seen_compat = set()
     candidates = [root / "steamapps/common/Proton - Experimental", root / "steamapps/common/Proton Hotfix"]
     for base in PROTON_TOOL_DIRS:
         if base.exists():
@@ -878,11 +932,49 @@ def proton_tools(root):
     for path in candidates:
         proton = path / "proton"
         real = proton.resolve() if proton.exists() else proton
-        if not proton.exists() or real in seen:
+        if not proton.exists() or real in seen_paths:
             continue
-        seen.add(real)
-        tools.append({"name": path.name, "path": str(proton)})
-    return tools
+        tool = compatibility_tool_metadata(path)
+        if tool["compat"] in seen_compat:
+            continue
+        seen_paths.add(real)
+        seen_compat.add(tool["compat"])
+        tools.append(tool)
+    return sorted(tools, key=lambda item: proton_sort_key(item["name"], item.get("version", "")), reverse=True)
+
+
+def proton_sort_key(name, version=""):
+    text = f"{name} {version}".lower()
+    score = 0
+    if "ge-proton" in text:
+        score += 3000
+    if "cachy" in text:
+        score += 2500
+    if "experimental" in text:
+        score += 2000
+    if "hotfix" in text:
+        score += 1500
+    nums = [int(part) for part in re.findall(r"\d+", text)[:4]]
+    while len(nums) < 4:
+        nums.append(0)
+    return (score, *nums)
+
+
+def recommended_proton_tool(system, tools):
+    if not tools:
+        return ""
+    wants_new = system.get("gpu") == "amd" or system.get("session", {}).get("type") == "wayland" or display_hdr_enabled(system.get("display", {}))
+    os_text = f"{system.get('os', {}).get('id', '')} {system.get('os', {}).get('name', '')}".lower()
+    if "cachy" in os_text:
+        for tool in tools:
+            if "cachy" in f"{tool['name']} {tool.get('compat', '')}".lower():
+                return tool["compat"]
+    if wants_new:
+        for needle in ("GE-Proton", "cachy", "Experimental"):
+            for tool in tools:
+                if needle.lower() in f"{tool['name']} {tool.get('compat', '')}".lower():
+                    return tool["compat"]
+    return tools[0]["compat"]
 
 
 def shell_join(parts):
@@ -917,6 +1009,92 @@ def localconfig_path(root):
         if str(cfg) == choice or cfg.parts[-3] == choice:
             return cfg
     sys.exit(1)
+
+
+def steam_config_path(root):
+    path = root / "config/config.vdf"
+    if not path.exists():
+        error("No encuentro config/config.vdf de Steam.")
+        sys.exit(1)
+    return path
+
+
+def current_compat_tool(config_text, appid):
+    mapping = find_named_block(config_text, "CompatToolMapping")
+    if not mapping:
+        return ""
+    body = config_text[mapping["block_start"] : mapping["block_end"]]
+    app_block = find_app_block(body, appid)
+    if not app_block:
+        return ""
+    app_body = body[app_block["block_start"] : app_block["block_end"]]
+    return vdf_value(app_body, "name")
+
+
+def compat_tool_display_name(tool_name, tools):
+    if not tool_name:
+        return "Steam por defecto"
+    for tool in tools:
+        if tool.get("compat") == tool_name:
+            version = f" ({tool['version']})" if tool.get("version") else ""
+            return f"{tool['name']}{version}"
+    return tool_name
+
+
+def compat_tool_block(appid, tool_name, indent):
+    child = indent + "\t"
+    escaped = escape_vdf(tool_name)
+    return (
+        f'{indent}"{appid}"\n'
+        f"{indent}{{\n"
+        f'{child}"name"\t\t"{escaped}"\n'
+        f'{child}"config"\t\t""\n'
+        f'{child}"priority"\t\t"250"\n'
+        f"{indent}}}\n"
+    )
+
+
+def set_compat_tool(config_path, appid, tool_name):
+    text = config_path.read_text(errors="replace")
+    mapping = find_named_block(text, "CompatToolMapping")
+    if not mapping and not tool_name:
+        return None
+    if not mapping:
+        steam_block = find_named_block(text, "Steam")
+        if not steam_block:
+            raise RuntimeError('No encuentro el bloque "Steam" en config.vdf.')
+        insert_at = text.find("\n", steam_block["block_start"]) + 1
+        indent = steam_block["indent"] + "\t"
+        app_indent = indent + "\t"
+        new_mapping = (
+            f'{indent}"CompatToolMapping"\n'
+            f"{indent}{{\n"
+            f"{compat_tool_block(appid, tool_name, app_indent)}"
+            f"{indent}}}\n"
+        )
+        new_text = text[:insert_at] + new_mapping + text[insert_at:]
+    else:
+        body = text[mapping["block_start"] : mapping["block_end"]]
+        app_block = find_app_block(body, appid)
+        app_indent = mapping["indent"] + "\t"
+        if app_block:
+            start = mapping["block_start"] + app_block["key_start"]
+            end = mapping["block_start"] + app_block["block_end"]
+            if tool_name:
+                replacement = compat_tool_block(appid, tool_name, app_indent)
+                new_text = text[:start] + replacement.rstrip("\n") + text[end:]
+            else:
+                new_text = text[:start] + text[end:]
+        elif tool_name:
+            insert_at = text.find("\n", mapping["block_start"]) + 1
+            replacement = compat_tool_block(appid, tool_name, app_indent)
+            new_text = text[:insert_at] + replacement + text[insert_at:]
+        else:
+            new_text = text
+    backup = config_path.with_suffix(config_path.suffix + "." + _dt.datetime.now().strftime("%Y%m%d-%H%M%S") + ".bak")
+    shutil.copy2(config_path, backup)
+    config_path.write_text(new_text)
+    return backup
 
 
 def shortcuts_path(root):
@@ -1670,6 +1848,8 @@ def qt_main():
                 self.app_config["steam_root"] = str(self.root)
                 save_app_config(self.app_config)
             self.config_path = localconfig_path(self.root)
+            self.steam_config_path = steam_config_path(self.root)
+            self.proton_tools = proton_tools(self.root)
             self.system = detect_system()
             self.system_recommended = system_recommended_keys(self.system)
             ensure_system_shared_preset(self.app_config, self.system)
@@ -1985,6 +2165,20 @@ def qt_main():
             self.current_label.setObjectName("gameCommand")
             self.current_label.setWordWrap(True)
             game_info_layout.addWidget(self.current_label)
+            proton_row = QtWidgets.QHBoxLayout()
+            self.proton_status_label = QtWidgets.QLabel("Proton: sin detectar")
+            self.proton_status_label.setWordWrap(True)
+            self.proton_combo = NoWheelComboBox()
+            self.proton_combo.setToolTip("Selecciona la version de Proton que Steam usara para este juego. Steam por defecto elimina el forzado por juego.")
+            self.recommend_proton_btn = QtWidgets.QPushButton("Recomendada")
+            self.recommend_proton_btn.setToolTip("Selecciona la version de Proton que Proton Pilot recomienda entre las instaladas.")
+            self.apply_proton_btn = QtWidgets.QPushButton("Aplicar Proton")
+            self.apply_proton_btn.setToolTip("Guarda la version de Proton elegida para este juego cerrando Steam si hace falta.")
+            proton_row.addWidget(self.proton_status_label, 1)
+            proton_row.addWidget(self.proton_combo, 1)
+            proton_row.addWidget(self.recommend_proton_btn)
+            proton_row.addWidget(self.apply_proton_btn)
+            game_info_layout.addLayout(proton_row)
             self.dirty_label = QtWidgets.QLabel("Sin cambios pendientes.")
             self.dirty_label.setObjectName("dirtyStatus")
             self.dirty_label.setWordWrap(True)
@@ -1999,6 +2193,24 @@ def qt_main():
             self.protondb_badge.setWordWrap(True)
             self.protondb_badge.setVisible(False)
             right.addWidget(self.protondb_badge)
+
+            self.tabs = QtWidgets.QTabWidget()
+            overview_tab = QtWidgets.QWidget()
+            presets_tab = QtWidgets.QWidget()
+            options_tab = QtWidgets.QWidget()
+            advanced_tab = QtWidgets.QWidget()
+            overview = QtWidgets.QVBoxLayout(overview_tab)
+            presets_view = QtWidgets.QVBoxLayout(presets_tab)
+            options_view = QtWidgets.QVBoxLayout(options_tab)
+            advanced = QtWidgets.QVBoxLayout(advanced_tab)
+            for tab_layout in (overview, presets_view, options_view, advanced):
+                tab_layout.setContentsMargins(6, 6, 6, 6)
+                tab_layout.setSpacing(6)
+            self.tabs.addTab(overview_tab, "Resumen")
+            self.tabs.addTab(presets_tab, "Presets")
+            self.tabs.addTab(options_tab, "Opciones")
+            self.tabs.addTab(advanced_tab, "Avanzado")
+            right.addWidget(self.tabs, 1)
 
             sys_box = QtWidgets.QGroupBox("Recomendaciones segun tu sistema")
             sys_layout = QtWidgets.QVBoxLayout(sys_box)
@@ -2036,7 +2248,7 @@ def qt_main():
             sys_reasons = QtWidgets.QLabel("\n".join(f"- {r}" for r in recommendation_reasons(self.system)) or "No hay recomendaciones automaticas.")
             sys_reasons.setWordWrap(True)
             sys_layout.addWidget(sys_reasons)
-            right.addWidget(sys_box)
+            overview.addWidget(sys_box)
 
             action_box = QtWidgets.QGroupBox("Acciones y recomendaciones")
             action_layout = QtWidgets.QHBoxLayout(action_box)
@@ -2059,7 +2271,8 @@ def qt_main():
             action_layout.addWidget(self.history_btn)
             action_layout.addWidget(self.about_btn)
             action_layout.addStretch(1)
-            right.addWidget(action_box)
+            overview.addWidget(action_box)
+            overview.addStretch(1)
 
             preset_box = QtWidgets.QGroupBox("Presets del juego")
             preset_layout = QtWidgets.QVBoxLayout(preset_box)
@@ -2083,7 +2296,8 @@ def qt_main():
             self.preset_choice_label.setObjectName("presetChoiceStatus")
             self.preset_choice_label.setWordWrap(True)
             preset_layout.addWidget(self.preset_choice_label)
-            right.addWidget(preset_box)
+            presets_view.addWidget(preset_box)
+            presets_view.addStretch(1)
 
             opts_box = QtWidgets.QGroupBox("Opciones que se aplicaran al lanzamiento")
             opts_layout = QtWidgets.QVBoxLayout(opts_box)
@@ -2121,12 +2335,12 @@ def qt_main():
                 self.checks[key] = cb
                 opts_layout.addWidget(cb)
             opts_layout.addStretch(1)
-            right.addWidget(opts_box)
+            options_view.addWidget(opts_box, 1)
 
             self.option_detail = QtWidgets.QLabel("Pasa el cursor por encima de una opcion para ver que hace y que anade al lanzamiento.")
             self.option_detail.setObjectName("optionDetail")
             self.option_detail.setWordWrap(True)
-            right.addWidget(self.option_detail)
+            options_view.addWidget(self.option_detail)
 
             res_box = QtWidgets.QGroupBox("Resolucion Gamescope")
             res_layout = QtWidgets.QHBoxLayout(res_box)
@@ -2153,7 +2367,7 @@ def qt_main():
             res_layout.addWidget(self.real_refresh)
             res_layout.addWidget(self.apply_resolution_btn)
             res_layout.addWidget(self.detect_display_btn)
-            right.addWidget(res_box)
+            advanced.addWidget(res_box)
 
             custom_box = QtWidgets.QGroupBox("Ajustes personalizados")
             custom_layout = QtWidgets.QFormLayout(custom_box)
@@ -2165,16 +2379,17 @@ def qt_main():
             self.custom_post.textChanged.connect(self.update_command)
             custom_layout.addRow("Antes:", self.custom_pre)
             custom_layout.addRow("Despues:", self.custom_post)
-            right.addWidget(custom_box)
+            advanced.addWidget(custom_box)
 
-            right.addWidget(QtWidgets.QLabel("Comando final"))
+            advanced.addWidget(QtWidgets.QLabel("Comando final"))
             self.command_edit = QtWidgets.QPlainTextEdit()
             self.command_edit.setPlaceholderText("%command%")
             self.command_edit.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
             self.command_edit.setMaximumHeight(78)
             self.command_edit.setMaximumBlockCount(4)
             self.command_edit.textChanged.connect(self.update_dirty_state)
-            right.addWidget(self.command_edit, 1)
+            advanced.addWidget(self.command_edit, 1)
+            advanced.addStretch(1)
 
             buttons = QtWidgets.QHBoxLayout()
             layout.addLayout(buttons)
@@ -2200,6 +2415,8 @@ def qt_main():
             self.assistant_btn.clicked.connect(self.show_profile_assistant)
             self.compare_btn.clicked.connect(self.show_compare_dialog)
             self.history_btn.clicked.connect(self.show_history_dialog)
+            self.recommend_proton_btn.clicked.connect(self.select_recommended_proton)
+            self.apply_proton_btn.clicked.connect(self.apply_selected_proton)
             self.launch_btn.clicked.connect(self.launch_current_game)
             self.about_btn.clicked.connect(self.show_about)
             self.apply_resolution_btn.clicked.connect(self.apply_resolution_fields)
@@ -2218,6 +2435,9 @@ def qt_main():
 
         def config_text(self):
             return self.config_path.read_text(errors="replace")
+
+        def steam_config_text(self):
+            return self.steam_config_path.read_text(errors="replace")
 
         def choose_steam_path(self):
             path = QtWidgets.QFileDialog.getExistingDirectory(
@@ -2239,6 +2459,8 @@ def qt_main():
                 self.app_config["steam_root"] = str(self.root)
                 save_app_config(self.app_config)
                 self.config_path = localconfig_path(self.root)
+                self.steam_config_path = steam_config_path(self.root)
+                self.proton_tools = proton_tools(self.root)
                 self.populate_games()
                 QtWidgets.QMessageBox.information(
                     self,
@@ -2266,9 +2488,92 @@ def qt_main():
             self.assistant_btn.setEnabled(bool(self.current_game))
             self.compare_btn.setEnabled(bool(self.current_game))
             self.history_btn.setEnabled(bool(self.current_game))
+            self.proton_combo.setEnabled(bool(self.current_game and not external))
+            self.apply_proton_btn.setEnabled(bool(self.current_game and not external))
+            self.recommend_proton_btn.setEnabled(bool(self.current_game and not external and self.proton_tools))
             manual = bool(self.current_game and self.current_game.get("manual"))
             self.edit_game_btn.setEnabled(manual)
             self.remove_game_btn.setEnabled(manual)
+
+        def current_game_compat_tool(self):
+            if not self.current_game or self.current_game.get("external"):
+                return ""
+            return current_compat_tool(self.steam_config_text(), self.current_game["appid"])
+
+        def update_proton_selector(self):
+            if not self.current_game:
+                return
+            self.proton_combo.blockSignals(True)
+            self.proton_combo.clear()
+            if self.current_game.get("external"):
+                proton = self.current_game.get("proton", "")
+                label = Path(proton).parent.name if proton else "sin Proton"
+                self.proton_status_label.setText(f"Proton externo: {label}")
+                self.proton_combo.addItem(label, proton)
+                self.proton_combo.blockSignals(False)
+                return
+            current = self.current_game_compat_tool()
+            recommended = recommended_proton_tool(self.system, self.proton_tools)
+            current_label = compat_tool_display_name(current, self.proton_tools)
+            rec_label = compat_tool_display_name(recommended, self.proton_tools) if recommended else "sin recomendacion"
+            self.proton_status_label.setText(f"Proton actual: {current_label}\nRecomendada: {rec_label}")
+            self.proton_combo.addItem("Steam por defecto", "")
+            if current and not any(tool["compat"] == current for tool in self.proton_tools):
+                self.proton_combo.addItem(f"Actual no detectada: {current}", current)
+            for tool in self.proton_tools:
+                suffix = "  - recomendada" if tool["compat"] == recommended else ""
+                version = f" ({tool['version']})" if tool.get("version") else ""
+                self.proton_combo.addItem(f"{tool['name']}{version}{suffix}", tool["compat"])
+            index = self.proton_combo.findData(current)
+            self.proton_combo.setCurrentIndex(index if index >= 0 else 0)
+            self.proton_combo.blockSignals(False)
+
+        def select_recommended_proton(self):
+            recommended = recommended_proton_tool(self.system, self.proton_tools)
+            index = self.proton_combo.findData(recommended)
+            if index >= 0:
+                self.proton_combo.setCurrentIndex(index)
+
+        def apply_selected_proton(self):
+            if not self.current_game or self.current_game.get("external"):
+                return
+            selected = self.proton_combo.currentData() or ""
+            current = self.current_game_compat_tool()
+            if selected == current:
+                QtWidgets.QMessageBox.information(self, "Proton sin cambios", "La version de Proton seleccionada ya esta aplicada para este juego.")
+                return
+            selected_label = compat_tool_display_name(selected, self.proton_tools)
+            current_label = compat_tool_display_name(current, self.proton_tools)
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Aplicar Proton",
+                f"Cambiar Proton para este juego?\n\nJuego: {self.current_game['name']}\nActual: {current_label}\nNuevo: {selected_label}\n\nSteam puede cerrarse para evitar que sobrescriba config.vdf.",
+            )
+            if reply != QtWidgets.QMessageBox.Yes:
+                return
+            reopen_steam = False
+            if steam_is_running():
+                close_reply = QtWidgets.QMessageBox.question(
+                    self,
+                    "Cerrar Steam para aplicar Proton",
+                    "Steam esta abierto. Para guardar la version de Proton por juego con seguridad, Proton Pilot puede cerrar Steam y volver a abrirlo.\n\nCerrar Steam y continuar?",
+                )
+                if close_reply != QtWidgets.QMessageBox.Yes:
+                    return
+                if not close_steam():
+                    QtWidgets.QMessageBox.warning(self, "No se pudo cerrar Steam", "Cierra Steam manualmente y vuelve a aplicar Proton.")
+                    return
+                reopen_steam = True
+            backup = set_compat_tool(self.steam_config_path, self.current_game["appid"], selected)
+            reopen_note = ""
+            if reopen_steam:
+                reopen_note = "\n\nSteam se ha vuelto a abrir." if open_steam(self.root) else "\n\nNo he podido volver a abrir Steam. Abre Steam manualmente."
+            self.update_proton_selector()
+            QtWidgets.QMessageBox.information(
+                self,
+                "Proton aplicado",
+                f"Proton guardado para {self.current_game['name']}:\n\n{selected_label}\n\nBackup:\n{backup}{reopen_note}",
+            )
 
         def prepared_command(self):
             return self.command_edit.toPlainText().strip()
@@ -2317,6 +2622,10 @@ def qt_main():
             display = system.get("display", {})
             lines.append(f"Juego: {self.current_game['name']}")
             lines.append(f"Destino: {'perfil externo' if self.current_game.get('external') else 'Steam localconfig.vdf'}")
+            if self.current_game.get("external"):
+                lines.append(f"Proton: {Path(self.current_game.get('proton', '')).parent.name or 'no definido'}")
+            else:
+                lines.append(f"Proton actual: {compat_tool_display_name(self.current_game_compat_tool(), self.proton_tools)}")
             lines.append(f"Steam abierto: {'si' if steam_is_running() else 'no'}")
             lines.append(f"Gamescope: {'disponible' if system['tools'].get('gamescope') else 'no disponible'}")
             lines.append(f"GameMode: {'disponible' if system['tools'].get('gamemoderun') else 'no disponible'}")
@@ -2455,6 +2764,7 @@ def qt_main():
             self.current_title.setText(f"{self.current_game['name']} ({self.current_game['appid']}) - {source}")
             self.current_label.setText(f"Opciones actuales guardadas:\n{current or '(sin opciones)'}")
             self.set_action_availability()
+            self.update_proton_selector()
             flags = detect_flags(current)
             custom = self.app_config.setdefault("custom", {}).get(self.current_game["appid"], {})
             saved_side_effects = set(custom.get("side_effect_options", []))
@@ -3451,7 +3761,8 @@ def qt_main():
                 "0.8.6 - Recuerda el preset exacto aplicado y avisa en rojo si hay uno pendiente.\n"
                 "0.8.7 - Iconos para ejecutables externos y comandos manuales guardados como presets custom.\n"
                 "0.8.8 - Estado de preset aplicado separado del preset seleccionado pendiente.\n"
-                "0.8.9 - Cambios pendientes, comparar, diagnostico, historial y asistente de perfil.\n\n"
+                "0.8.9 - Cambios pendientes, comparar, diagnostico, historial y asistente de perfil.\n"
+                "0.9.0 - Gestion de Proton por juego, recomendaciones, pestanas y builder AppImage.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )

@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.8.9
+Version: 0.9.0
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -37,6 +37,11 @@ tocar `localconfig.vdf`.
   Proton profiles can look closer to their launcher/menu icon.
 - Lets you choose and persist a custom Steam root path if automatic detection misses it.
 - Reads and writes Steam launch options in `localconfig.vdf`.
+- Shows and changes the Steam compatibility tool / Proton version used by each
+  Steam game through `config.vdf` `CompatToolMapping`.
+- Recommends one installed Proton tool based on the local system, preferring
+  Cachy Proton on CachyOS, newer GE/Cachy/Experimental builds for AMD/HDR/Wayland
+  setups, and Steam defaults when nothing special is needed.
 - Creates a backup before writing changes.
 - Shows system-aware recommendations based on detected GPU, session type, and installed tools.
 - Shows clear system status cards for display resolution, HDR, VRR, GPU, and tools.
@@ -100,6 +105,32 @@ Run it from the application menu as **Proton Pilot**, or from a terminal:
 
 ```bash
 proton-pilot
+```
+
+## AppImage
+
+The project also includes an AppImage builder:
+
+```bash
+./build-appimage.sh
+```
+
+It creates:
+
+```bash
+dist/Proton-Pilot-<version>-x86_64.AppImage
+```
+
+The AppImage bundles Proton Pilot's Python-side dependencies, including PySide6
+and `vdf`. System integrations are still expected from the host: Steam,
+Gamescope, GameMode, MangoHud, `icoutils`, and GPU/display drivers are not
+bundled because they must match the local Linux gaming stack.
+
+Most desktops need FUSE support to run AppImages directly. On Arch/CachyOS this
+is usually:
+
+```bash
+sudo pacman -S fuse2
 ```
 
 ## Requirements
@@ -222,6 +253,12 @@ Launch options are written to:
 ~/.local/share/Steam/userdata/<account>/config/localconfig.vdf
 ```
 
+Per-game Proton compatibility-tool choices are written to:
+
+```bash
+~/.local/share/Steam/config/config.vdf
+```
+
 Backups are created next to that file before saving.
 
 Close Steam before saving launch options when possible. Steam can rewrite
@@ -256,6 +293,10 @@ you to open Steam manually.
 - The selected-game panel warns immediately when no preset is applied. Pending
   preset selections are shown inside the preset box, next to the selector and
   `Aplicar preset`.
+- The selected-game panel shows the current Proton/compatibility tool and lets
+  you switch to Steam default or an installed Proton build.
+- The main workspace is split into tabs: summary, presets, launch options, and
+  advanced command/resolution controls.
 - The selected-game panel also warns when the command prepared on screen differs
   from the command already saved for that game.
 - `Comparar` shows saved launch options next to the prepared command.
@@ -412,3 +453,6 @@ support or game-specific configuration.
 - 0.8.9: Adds pending-change status, saved-vs-prepared comparison, pre-apply
   diagnostics, per-game launch history/restore, ProtonDB cache refresh details,
   and a goal-based profile assistant.
+- 0.9.0: Adds per-game Proton display/change support, Proton recommendations,
+  a tabbed interface to reduce clutter, and an AppImage builder alongside the
+  existing installer.
