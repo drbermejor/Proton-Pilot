@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.10.1
+Version: 0.10.2
 
 Proton Pilot is a local GUI for managing Steam launch options per installed game.
 It is designed for Linux gaming setups using Steam, Proton, GE-Proton, Gamescope,
@@ -53,6 +53,8 @@ tocar `localconfig.vdf`.
 - Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
 - Provides an automatic shared `Recomendado del sistema` preset based on detected hardware and session.
 - Lets you create, load, update, and delete your own shared presets.
+- Lets you create user-defined launch option toggles, place them in the existing
+  categories, delete them to a restoreable trash list, and restore them later.
 - Lets you save a manually edited final command as a per-game custom preset.
 - Shows when the prepared command differs from the command currently saved for
   the selected game.
@@ -382,6 +384,12 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
 - External executable icons are extracted from the `.exe` when `icoutils` is
   installed; otherwise Proton Pilot falls back to the generic icon.
 - Launch options are displayed as a vertical list so each option is easier to scan.
+- `Añadir opcion` opens a wizard for creating reusable user-defined toggles. Each
+  custom option can add parameters before `%command%`, Gamescope arguments, and
+  parameters after `%command%`.
+- User-defined launch options live in the same categories as built-in options.
+  `Borrar opcion manual` moves them to a trash list, and `Restaurar opcion`
+  brings them back later.
 - `Guardar comando manual` is highlighted in green. It is meant for cases where
   you edit the `Comando final` text directly; Proton Pilot will offer to create
   a per-game custom preset for that exact command.
@@ -411,7 +419,8 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
   that Proton version is still installed.
 - `Aplicar cambios preparados` writes the command currently visible on screen.
 - `Modo compacto` hides technical descriptions and shortens the command summary
-  for smaller screens.
+  for smaller screens. It also hides the advanced tab and collapses option groups
+  so the first screen is more focused.
 - `Solo lectura` lets you inspect games, presets, ProtonDB, diagnostics, and
   commands without writing to Steam or changing presets.
 - `Asistente perfil` marks options for a selected goal, then leaves the command
@@ -421,6 +430,8 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
   return to the game.
 - Launch options are grouped into collapsible sections: performance, display/HDR,
   handheld scaling, and Proton compatibility.
+- The `Resumen/Presets/Opciones/Avanzado` tab bar ignores mouse-wheel events so
+  scrolling over the tab bar no longer changes tabs by accident.
 
 ## External Executables
 
@@ -579,3 +590,6 @@ support or game-specific configuration.
   GitHub release update checks.
 - 0.10.1: Handles GitHub repositories without releases gracefully and increases
   group-box spacing so titles do not overlap the content.
+- 0.10.2: Adds reusable user-defined launch option toggles with category
+  placement, delete/restore support, a scrollable newest-first About dialog,
+  tab bars that ignore mouse-wheel changes, and a stricter compact mode.

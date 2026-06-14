@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.10.1"
+APP_VERSION = "0.10.2"
 APP_REPO = "drbermejor/Proton-Pilot"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
@@ -88,6 +88,8 @@ DEFAULT_APP_CONFIG = {
     "proton_history": {},
     "compact_mode": False,
     "read_only": False,
+    "custom_options": [],
+    "custom_options_trash": [],
 }
 
 OPTION_INFO = {
@@ -237,6 +239,8 @@ OPTION_GROUPS = [
     ("Escalado y handheld", ("HANDHELD800P", "HANDHELD1200P", "GSFSR", "GSNIS")),
     ("Compatibilidad Proton", ("WAYLAND", "FSR4", "FSR4IND", "RT", "NODXR", "DX12", "NVIDIA", "UEHDR")),
 ]
+OPTION_GROUP_TITLES = [title for title, _keys in OPTION_GROUPS]
+CUSTOM_OPTION_PREFIX = "CUSTOMOPT:"
 
 
 def z(args, text=None, check=True):
@@ -407,6 +411,32 @@ def ensure_system_shared_preset(config, system):
 
 def normalize_command(command):
     return " ".join(str(command or "").split())
+
+
+def slugify_option_label(label):
+    slug = re.sub(r"[^a-z0-9]+", "-", str(label or "").lower()).strip("-")
+    return slug or "opcion"
+
+
+def custom_option_key(option):
+    return CUSTOM_OPTION_PREFIX + str(option.get("id", ""))
+
+
+def is_custom_option_key(key):
+    return str(key or "").startswith(CUSTOM_OPTION_PREFIX)
+
+
+def custom_option_tokens(option):
+    tokens = []
+    for field in ("pre", "gamescope", "post"):
+        tokens.extend(shell_words(option.get(field, "")))
+    return [token for token in tokens if token != "%command%"]
+
+
+def custom_option_matches_command(option, command):
+    command = str(command or "")
+    tokens = custom_option_tokens(option)
+    return bool(tokens) and all(token in command for token in tokens)
 
 
 def launch_commands_equivalent(first, second):
@@ -1012,6 +1042,16 @@ def shell_join(parts):
     return " ".join(shlex.quote(str(part)) for part in parts)
 
 
+def shell_words(text):
+    text = str(text or "").strip()
+    if not text:
+        return []
+    try:
+        return shlex.split(text)
+    except ValueError:
+        return text.split()
+
+
 def localconfig_path(root):
     configs = sorted((root / "userdata").glob("*/config/localconfig.vdf"))
     if not configs:
@@ -1366,14 +1406,18 @@ def vrr_cap_from_refresh(refresh, margin=3):
     return max(30, refresh - margin) if refresh else 0
 
 
-def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
+def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None, custom_options=None):
     selected = set(selected)
+    custom_defs = {custom_option_key(option): option for option in (custom_options or [])}
+    selected_custom = [custom_defs[key] for key in selected if key in custom_defs]
     gamescope_options = {"HDR", "GAMESCOPE", "REALRES", "ADAPTIVE", "HANDHELD800P", "HANDHELD1200P", "CAP60", "CAP72", "CAPVRR", "GSFSR", "GSNIS"}
-    use_gamescope = bool(gamescope_options & selected)
+    use_gamescope = bool(gamescope_options & selected) or any(shell_words(option.get("gamescope", "")) for option in selected_custom)
     parts = []
     post_args = []
     if custom_pre.strip():
-        parts.extend(custom_pre.strip().split())
+        parts.extend(shell_words(custom_pre))
+    for option in selected_custom:
+        parts.extend(shell_words(option.get("pre", "")))
 
     if "WAYLAND" in selected:
         parts.append("PROTON_ENABLE_WAYLAND=1")
@@ -1393,6 +1437,8 @@ def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
         parts.extend(["PROTON_ENABLE_NVAPI=1", "PROTON_HIDE_NVIDIA_GPU=0", "PROTON_ENABLE_NGX_UPDATER=1"])
     if "DX12" in selected:
         post_args.append("-dx12")
+    for option in selected_custom:
+        post_args.extend(shell_words(option.get("post", "")))
 
     vrr_cap = vrr_cap_from_refresh((gamescope_res or {}).get("refresh")) if "CAPVRR" in selected else 0
     if vrr_cap:
@@ -1421,6 +1467,8 @@ def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
             flags.extend(["-F", "fsr", "--sharpness", "5"])
         elif "GSNIS" in selected:
             flags.extend(["-F", "nis", "--sharpness", "5"])
+        for option in selected_custom:
+            flags.extend(shell_words(option.get("gamescope", "")))
         if "HDR" in selected:
             flags.append("--hdr-enabled")
         if "MANGOHUD" in selected and not vrr_cap:
@@ -1438,7 +1486,7 @@ def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None):
     parts.append("%command%")
     parts.extend(post_args)
     if custom_post.strip():
-        parts.extend(custom_post.strip().split())
+        parts.extend(shell_words(custom_post))
     return " ".join(parts)
 
 
@@ -1542,6 +1590,14 @@ def latest_release_info():
         "asset_url": asset_url,
         "asset_name": asset_name,
     }
+
+
+def version_tuple(version):
+    return tuple(int(part) for part in re.findall(r"\d+", str(version or ""))[:4])
+
+
+def is_newer_version(candidate, current):
+    return version_tuple(candidate) > version_tuple(current)
 
 
 def protondb_reports(appid, config):
@@ -1921,6 +1977,10 @@ def qt_main():
             event.ignore()
 
     class NoWheelSpinBox(QtWidgets.QSpinBox):
+        def wheelEvent(self, event):
+            event.ignore()
+
+    class NoWheelTabBar(QtWidgets.QTabBar):
         def wheelEvent(self, event):
             event.ignore()
 
@@ -2329,6 +2389,7 @@ def qt_main():
             right.addWidget(self.protondb_badge)
 
             self.tabs = QtWidgets.QTabWidget()
+            self.tabs.setTabBar(NoWheelTabBar())
             overview_tab = QtWidgets.QWidget()
             presets_tab = QtWidgets.QWidget()
             options_tab = QtWidgets.QWidget()
@@ -2481,57 +2542,27 @@ def qt_main():
             opts_layout = QtWidgets.QVBoxLayout(opts_box)
             opts_layout.setContentsMargins(8, 20, 8, 8)
             opts_layout.setSpacing(6)
+            option_buttons = QtWidgets.QGridLayout()
+            option_buttons.setHorizontalSpacing(6)
+            self.add_option_btn = QtWidgets.QPushButton("Añadir opcion")
+            self.add_option_btn.setToolTip("Crea una opcion manual reutilizable y la coloca en la categoria elegida.")
+            self.delete_option_btn = QtWidgets.QPushButton("Borrar opcion manual")
+            self.delete_option_btn.setToolTip("Mueve una opcion manual a la papelera para poder restaurarla despues.")
+            self.restore_option_btn = QtWidgets.QPushButton("Restaurar opcion")
+            self.restore_option_btn.setToolTip("Recupera una opcion manual borrada previamente.")
+            option_buttons.addWidget(self.add_option_btn, 0, 0)
+            option_buttons.addWidget(self.delete_option_btn, 0, 1)
+            option_buttons.addWidget(self.restore_option_btn, 0, 2)
+            for col in range(3):
+                option_buttons.setColumnStretch(col, 1)
+            opts_layout.addLayout(option_buttons)
+            self.options_container = QtWidgets.QWidget()
+            self.options_container_layout = QtWidgets.QVBoxLayout(self.options_container)
+            self.options_container_layout.setContentsMargins(0, 0, 0, 0)
+            self.options_container_layout.setSpacing(6)
             self.option_group_boxes = []
-            for group_index, (group_title, group_keys) in enumerate(OPTION_GROUPS):
-                group = QtWidgets.QGroupBox(group_title)
-                group.setObjectName("optionGroup")
-                group.setCheckable(True)
-                group.setChecked(group_index < 2)
-                group_layout = QtWidgets.QVBoxLayout(group)
-                group_layout.setContentsMargins(8, 20, 8, 8)
-                group_layout.setSpacing(5)
-                content = QtWidgets.QWidget()
-                content_layout = QtWidgets.QVBoxLayout(content)
-                content_layout.setContentsMargins(2, 2, 2, 2)
-                content_layout.setSpacing(5)
-                for key in group_keys:
-                    meta = OPTION_INFO[key]
-                    label = meta["label"]
-                    desc = meta["description"]
-                    recommended = meta["recommended"]
-                    important = meta.get("important", False)
-                    caution = meta.get("caution", False)
-                    system_recommended = key in self.system_recommended
-                    suffix = ""
-                    if system_recommended and caution:
-                        suffix = "  - sistema / probar"
-                    elif system_recommended:
-                        suffix = "  - sistema"
-                    elif recommended:
-                        suffix = "  - recomendado"
-                    elif caution:
-                        suffix = "  - probar"
-                    elif important:
-                        suffix = "  - importante"
-                    text = label + suffix
-                    cb = QtWidgets.QCheckBox(text)
-                    cb.setObjectName("launchOption")
-                    cb.setToolTip(f"{desc}\n\nAnade: {meta['tokens']}")
-                    cb.setProperty("recommended", "true" if recommended else "false")
-                    cb.setProperty("systemRecommended", "true" if system_recommended else "false")
-                    cb.setProperty("important", "true" if important else "false")
-                    cb.setProperty("caution", "true" if caution else "false")
-                    cb.setProperty("optionKey", key)
-                    cb.installEventFilter(self)
-                    cb.stateChanged.connect(self.update_command)
-                    cb.clicked.connect(lambda checked=False, k=key: self.show_option_detail(k))
-                    self.checks[key] = cb
-                    content_layout.addWidget(cb)
-                group_layout.addWidget(content)
-                group.toggled.connect(content.setVisible)
-                content.setVisible(group.isChecked())
-                self.option_group_boxes.append(group)
-                opts_layout.addWidget(group)
+            opts_layout.addWidget(self.options_container)
+            self.rebuild_option_checkboxes()
             opts_layout.addStretch(1)
             options_view.addWidget(opts_box, 1)
 
@@ -2619,6 +2650,9 @@ def qt_main():
             self.open_protondb_btn.clicked.connect(self.open_protondb)
             self.apply_system_btn.clicked.connect(self.apply_system_recommended)
             self.apply_command_btn.clicked.connect(self.apply_prepared_command)
+            self.add_option_btn.clicked.connect(self.add_custom_option)
+            self.delete_option_btn.clicked.connect(self.delete_custom_option)
+            self.restore_option_btn.clicked.connect(self.restore_custom_option)
             self.assistant_btn.clicked.connect(self.show_profile_assistant)
             self.compare_btn.clicked.connect(self.show_compare_dialog)
             self.history_btn.clicked.connect(self.show_history_dialog)
@@ -2725,13 +2759,25 @@ def qt_main():
         def apply_compact_mode(self):
             compact = bool(self.app_config.get("compact_mode"))
             for widget in (
+                getattr(self, "current_label", None),
+                getattr(self, "proton_status_label", None),
                 getattr(self, "sys_reasons", None),
                 getattr(self, "option_detail", None),
             ):
                 if widget:
                     widget.setVisible(not compact)
+            if getattr(self, "protondb_badge", None):
+                if compact:
+                    self.protondb_badge.setVisible(False)
+                elif self.current_game and not self.current_game.get("external"):
+                    self.update_protondb_badge(self.cached_game_summary(self.current_game["appid"]))
             if getattr(self, "command_edit", None):
                 self.command_edit.setMaximumHeight(54 if compact else 78)
+            if getattr(self, "tabs", None):
+                self.tabs.setTabVisible(3, not compact)
+            for group in getattr(self, "option_group_boxes", []):
+                if compact:
+                    group.setChecked(False)
             if getattr(self, "current_label", None) and self.current_game:
                 self.current_label.setText(f"Opciones guardadas: {short_command(self.current_game_launch_options(), 150 if compact else 220)}")
 
@@ -2761,6 +2807,9 @@ def qt_main():
             self.save_preset_btn.setEnabled(bool(self.current_game and not read_only))
             self.update_preset_btn.setEnabled(bool(self.current_game and not read_only))
             self.delete_preset_btn.setEnabled(bool(self.current_game and not read_only))
+            self.add_option_btn.setEnabled(not read_only)
+            self.delete_option_btn.setEnabled(bool(self.active_custom_options() and not read_only))
+            self.restore_option_btn.setEnabled(bool(self.app_config.setdefault("custom_options_trash", []) and not read_only))
             self.register_appimage_btn.setEnabled(not read_only)
             manual = bool(self.current_game and self.current_game.get("manual"))
             self.edit_game_btn.setEnabled(manual and not read_only)
@@ -3068,15 +3117,17 @@ def qt_main():
             rating = protondb_tier_label(summary)
             self.current_title.setText(f"{self.current_game['name']} ({self.current_game['appid']}) - {source}")
             self.current_label.setText(f"Opciones guardadas: {short_command(current, 150 if self.app_config.get('compact_mode') else 220)}")
+            self.rebuild_option_checkboxes()
             self.set_action_availability()
             self.update_proton_selector()
             flags = detect_flags(current)
             custom = self.app_config.setdefault("custom", {}).get(self.current_game["appid"], {})
             saved_side_effects = set(custom.get("side_effect_options", []))
             for key, cb in self.checks.items():
+                detected = custom_option_matches_command(self.option_from_key(key), current) if is_custom_option_key(key) else flags.get(key, False)
                 cb.blockSignals(True)
-                cb.setChecked(flags.get(key, False) or key in saved_side_effects)
-                cb.setProperty("active", "true" if flags.get(key, False) else "false")
+                cb.setChecked(detected or key in saved_side_effects)
+                cb.setProperty("active", "true" if detected else "false")
                 cb.style().unpolish(cb)
                 cb.style().polish(cb)
                 cb.blockSignals(False)
@@ -3101,6 +3152,7 @@ def qt_main():
             else:
                 self.update_command()
             self.update_dirty_state()
+            self.apply_compact_mode()
 
         def add_manual_game(self):
             if not self.write_guard("anadir juegos"):
@@ -3413,6 +3465,304 @@ def qt_main():
             save_app_config(self.app_config)
             self.populate_games()
 
+        def active_custom_options(self):
+            return [
+                option for option in self.app_config.setdefault("custom_options", [])
+                if option.get("id") and not option.get("deleted")
+            ]
+
+        def option_from_key(self, key):
+            if not is_custom_option_key(key):
+                return {}
+            for option in self.active_custom_options():
+                if custom_option_key(option) == key:
+                    return option
+            return {}
+
+        def option_meta(self, key):
+            if key in OPTION_INFO:
+                return OPTION_INFO[key]
+            for option in self.active_custom_options():
+                if custom_option_key(option) == key:
+                    label = option.get("label", "Opcion manual")
+                    tokens = []
+                    if option.get("pre"):
+                        tokens.append(f"antes: {option.get('pre')}")
+                    if option.get("gamescope"):
+                        tokens.append(f"gamescope: {option.get('gamescope')}")
+                    if option.get("post"):
+                        tokens.append(f"despues: {option.get('post')}")
+                    return {
+                        "label": label,
+                        "description": option.get("description", ""),
+                        "tokens": " · ".join(tokens) or "(sin parametros)",
+                        "recommended": False,
+                        "custom": True,
+                        "important": option.get("style") == "important",
+                        "caution": option.get("style") == "caution",
+                    }
+            return {
+                "label": key,
+                "description": "Opcion no encontrada. Puede haber sido borrada de la lista manual.",
+                "tokens": "",
+                "recommended": False,
+                "custom": True,
+            }
+
+        def clear_layout(self, layout):
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                child_layout = item.layout()
+                if widget:
+                    widget.deleteLater()
+                elif child_layout:
+                    self.clear_layout(child_layout)
+
+        def rebuild_option_checkboxes(self, preserve_checked=None):
+            if preserve_checked is None:
+                preserve_checked = set(self.selected_keys()) if getattr(self, "checks", None) else set()
+            else:
+                preserve_checked = set(preserve_checked)
+            self.clear_layout(self.options_container_layout)
+            self.checks = {}
+            self.option_group_boxes = []
+            custom_by_group = {title: [] for title in OPTION_GROUP_TITLES}
+            for option in self.active_custom_options():
+                custom_by_group.setdefault(option.get("category") or OPTION_GROUP_TITLES[-1], []).append(option)
+
+            for group_index, (group_title, group_keys) in enumerate(OPTION_GROUPS):
+                group = QtWidgets.QGroupBox(group_title)
+                group.setObjectName("optionGroup")
+                group.setCheckable(True)
+                group.setChecked(False if self.app_config.get("compact_mode") else group_index < 2)
+                group_layout = QtWidgets.QVBoxLayout(group)
+                group_layout.setContentsMargins(8, 20, 8, 8)
+                group_layout.setSpacing(5)
+                content = QtWidgets.QWidget()
+                content_layout = QtWidgets.QVBoxLayout(content)
+                content_layout.setContentsMargins(2, 2, 2, 2)
+                content_layout.setSpacing(5)
+
+                for key in group_keys:
+                    self.add_option_checkbox(content_layout, key, key in preserve_checked)
+                for option in sorted(custom_by_group.get(group_title, []), key=lambda item: item.get("label", "").lower()):
+                    key = custom_option_key(option)
+                    self.add_option_checkbox(content_layout, key, key in preserve_checked)
+
+                group_layout.addWidget(content)
+                group.toggled.connect(content.setVisible)
+                content.setVisible(group.isChecked())
+                self.option_group_boxes.append(group)
+                self.options_container_layout.addWidget(group)
+            self.options_container_layout.addStretch(1)
+
+        def add_option_checkbox(self, layout, key, checked=False):
+            meta = self.option_meta(key)
+            label = meta["label"]
+            recommended = meta.get("recommended", False)
+            important = meta.get("important", False)
+            caution = meta.get("caution", False)
+            system_recommended = key in self.system_recommended
+            suffix = ""
+            if meta.get("custom"):
+                suffix = "  - manual"
+            elif system_recommended and caution:
+                suffix = "  - sistema / probar"
+            elif system_recommended:
+                suffix = "  - sistema"
+            elif recommended:
+                suffix = "  - recomendado"
+            elif caution:
+                suffix = "  - probar"
+            elif important:
+                suffix = "  - importante"
+            cb = QtWidgets.QCheckBox(label + suffix)
+            cb.setObjectName("launchOption")
+            cb.setToolTip(f"{meta.get('description', '')}\n\nAnade: {meta.get('tokens', '')}".strip())
+            cb.setProperty("recommended", "true" if recommended else "false")
+            cb.setProperty("systemRecommended", "true" if system_recommended else "false")
+            cb.setProperty("important", "true" if important else "false")
+            cb.setProperty("caution", "true" if caution else "false")
+            cb.setProperty("optionKey", key)
+            cb.setChecked(checked)
+            cb.installEventFilter(self)
+            cb.stateChanged.connect(self.update_command)
+            cb.clicked.connect(lambda checked=False, k=key: self.show_option_detail(k))
+            self.checks[key] = cb
+            layout.addWidget(cb)
+
+        def custom_option_dialog(self):
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle("Añadir opcion manual")
+            dialog.resize(760, 520)
+            layout = QtWidgets.QVBoxLayout(dialog)
+            form = QtWidgets.QFormLayout()
+            layout.addLayout(form)
+            name_edit = QtWidgets.QLineEdit()
+            name_edit.setPlaceholderText("Ej: Proton log, RADV RT, Flag experimental...")
+            category_combo = NoWheelComboBox()
+            for title in OPTION_GROUP_TITLES:
+                category_combo.addItem(title, title)
+            style_combo = NoWheelComboBox()
+            style_combo.addItem("Normal", "normal")
+            style_combo.addItem("Importante / amarillo", "important")
+            style_combo.addItem("Experimental / rojo", "caution")
+            description = QtWidgets.QPlainTextEdit()
+            description.setPlaceholderText("Que hace, cuando usarla y riesgos conocidos.")
+            description.setMaximumHeight(90)
+            pre_edit = QtWidgets.QLineEdit()
+            pre_edit.setPlaceholderText("Antes de %command%, ej: PROTON_LOG=1 RADV_PERFTEST=rt")
+            gamescope_edit = QtWidgets.QLineEdit()
+            gamescope_edit.setPlaceholderText("Argumentos de gamescope, ej: --expose-wayland -e")
+            post_edit = QtWidgets.QLineEdit()
+            post_edit.setPlaceholderText("Despues de %command%, ej: -dx12 -NoLauncher")
+            form.addRow("Nombre:", name_edit)
+            form.addRow("Categoria:", category_combo)
+            form.addRow("Color:", style_combo)
+            form.addRow("Descripcion:", description)
+            form.addRow("Antes:", pre_edit)
+            form.addRow("Gamescope:", gamescope_edit)
+            form.addRow("Despues:", post_edit)
+            hint = QtWidgets.QLabel(
+                "Rellena al menos uno de los campos Antes, Gamescope o Despues. "
+                "Los argumentos Gamescope activan el contenedor Gamescope si no estaba activo."
+            )
+            hint.setWordWrap(True)
+            layout.addWidget(hint)
+            buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+            layout.addWidget(buttons)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            if dialog.exec() != QtWidgets.QDialog.Accepted:
+                return None
+            label = name_edit.text().strip()
+            pre = pre_edit.text().strip()
+            gamescope = gamescope_edit.text().strip()
+            post = post_edit.text().strip()
+            if not label:
+                QtWidgets.QMessageBox.warning(self, "Falta nombre", "Necesito un nombre para la opcion manual.")
+                return None
+            if not (pre or gamescope or post):
+                QtWidgets.QMessageBox.warning(self, "Faltan parametros", "Rellena Antes, Gamescope o Despues.")
+                return None
+            stamp = _dt.datetime.now().strftime("%Y%m%d%H%M%S")
+            return {
+                "id": f"{slugify_option_label(label)}-{stamp}",
+                "label": label,
+                "category": category_combo.currentData(),
+                "style": style_combo.currentData(),
+                "description": description.toPlainText().strip(),
+                "pre": pre,
+                "gamescope": gamescope,
+                "post": post,
+                "created_at": _dt.datetime.now().isoformat(timespec="seconds"),
+            }
+
+        def add_custom_option(self):
+            if not self.write_guard("anadir opciones manuales"):
+                return
+            option = self.custom_option_dialog()
+            if not option:
+                return
+            key = custom_option_key(option)
+            selected = set(self.selected_keys())
+            selected.add(key)
+            self.app_config.setdefault("custom_options", []).append(option)
+            save_app_config(self.app_config)
+            self.rebuild_option_checkboxes(selected)
+            self.set_action_availability()
+            self.show_option_detail(key)
+            self.update_command()
+
+        def choose_custom_option(self, title, options):
+            if not options:
+                QtWidgets.QMessageBox.information(self, title, "No hay opciones manuales en esta lista.")
+                return None
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle(title)
+            dialog.resize(620, 420)
+            layout = QtWidgets.QVBoxLayout(dialog)
+            list_widget = QtWidgets.QListWidget()
+            for option in options:
+                item = QtWidgets.QListWidgetItem(f"{option.get('label', 'Opcion')}  ·  {option.get('category', '')}")
+                item.setData(QtCore.Qt.UserRole, option)
+                list_widget.addItem(item)
+            layout.addWidget(list_widget, 1)
+            preview = QtWidgets.QPlainTextEdit()
+            preview.setReadOnly(True)
+            layout.addWidget(preview, 1)
+            buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+            layout.addWidget(buttons)
+
+            def update_preview(item):
+                option = item.data(QtCore.Qt.UserRole) if item else {}
+                preview.setPlainText(
+                    f"{option.get('label', '')}\n\n"
+                    f"{option.get('description', '')}\n\n"
+                    f"Antes: {option.get('pre', '')}\n"
+                    f"Gamescope: {option.get('gamescope', '')}\n"
+                    f"Despues: {option.get('post', '')}"
+                )
+
+            list_widget.currentItemChanged.connect(update_preview)
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            if list_widget.count():
+                list_widget.setCurrentRow(0)
+            if dialog.exec() != QtWidgets.QDialog.Accepted or not list_widget.currentItem():
+                return None
+            return list_widget.currentItem().data(QtCore.Qt.UserRole)
+
+        def delete_custom_option(self):
+            if not self.write_guard("borrar opciones manuales"):
+                return
+            option = self.choose_custom_option("Borrar opcion manual", self.active_custom_options())
+            if not option:
+                return
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "Borrar opcion manual",
+                f"Mover esta opcion a la papelera?\n\n{option.get('label')}\n\n"
+                "Los presets que la usen no podran reconstruir ese parametro hasta que la restaures.",
+            )
+            if reply != QtWidgets.QMessageBox.Yes:
+                return
+            key = custom_option_key(option)
+            selected = set(self.selected_keys())
+            selected.discard(key)
+            self.app_config["custom_options"] = [
+                item for item in self.app_config.setdefault("custom_options", []) if item.get("id") != option.get("id")
+            ]
+            option = dict(option)
+            option["deleted_at"] = _dt.datetime.now().isoformat(timespec="seconds")
+            self.app_config.setdefault("custom_options_trash", []).insert(0, option)
+            save_app_config(self.app_config)
+            self.rebuild_option_checkboxes(selected)
+            self.set_action_availability()
+            self.update_command()
+
+        def restore_custom_option(self):
+            if not self.write_guard("restaurar opciones manuales"):
+                return
+            trash = self.app_config.setdefault("custom_options_trash", [])
+            option = self.choose_custom_option("Restaurar opcion manual", trash)
+            if not option:
+                return
+            restored = dict(option)
+            restored.pop("deleted_at", None)
+            selected = set(self.selected_keys())
+            selected.add(custom_option_key(restored))
+            self.app_config["custom_options_trash"] = [
+                item for item in trash if item.get("id") != option.get("id")
+            ]
+            self.app_config.setdefault("custom_options", []).append(restored)
+            save_app_config(self.app_config)
+            self.rebuild_option_checkboxes(selected)
+            self.set_action_availability()
+            self.show_option_detail(custom_option_key(restored))
+            self.update_command()
+
         def selected_keys(self):
             return [key for key, cb in self.checks.items() if cb.isChecked()]
 
@@ -3424,10 +3774,12 @@ def qt_main():
             return super().eventFilter(obj, event)
 
         def show_option_detail(self, key):
-            meta = OPTION_INFO[key]
+            meta = self.option_meta(key)
             if key in self.system_recommended:
                 recommended = "Recomendada para tu sistema; el boton Marcar recomendadas la activara."
-            elif meta["recommended"]:
+            elif meta.get("custom"):
+                recommended = "Opcion manual creada por el usuario. Puedes borrarla y restaurarla desde esta pestana."
+            elif meta.get("recommended"):
                 recommended = "Recomendada por defecto"
             elif meta.get("caution"):
                 recommended = "Puede beneficiar, pero conviene probarla por juego. Por eso aparece en rojo."
@@ -3451,7 +3803,13 @@ def qt_main():
             )
 
         def update_command(self):
-            command = compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text(), self.gamescope_resolution())
+            command = compose_launch(
+                self.selected_keys(),
+                self.custom_pre.text(),
+                self.custom_post.text(),
+                self.gamescope_resolution(),
+                self.active_custom_options(),
+            )
             self.command_edit.setPlainText(command)
 
         def gamescope_resolution(self):
@@ -3526,6 +3884,7 @@ def qt_main():
                     preset.get("custom_pre", ""),
                     preset.get("custom_post", ""),
                     preset.get("gamescope_res", {}),
+                    self.active_custom_options(),
                 )
             return preset.get("command", "")
 
@@ -3590,7 +3949,13 @@ def qt_main():
             return ref
 
         def current_preset_payload(self):
-            command = compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text(), self.gamescope_resolution())
+            command = compose_launch(
+                self.selected_keys(),
+                self.custom_pre.text(),
+                self.custom_post.text(),
+                self.gamescope_resolution(),
+                self.active_custom_options(),
+            )
             self.command_edit.setPlainText(command)
             return {
                 "options": self.selected_keys(),
@@ -3601,7 +3966,13 @@ def qt_main():
             }
 
         def generated_command_from_controls(self):
-            return compose_launch(self.selected_keys(), self.custom_pre.text(), self.custom_post.text(), self.gamescope_resolution())
+            return compose_launch(
+                self.selected_keys(),
+                self.custom_pre.text(),
+                self.custom_post.text(),
+                self.gamescope_resolution(),
+                self.active_custom_options(),
+            )
 
         def command_was_edited_manually(self, command):
             return normalize_command(command) != normalize_command(self.generated_command_from_controls())
@@ -4135,7 +4506,7 @@ def qt_main():
             message = f"Version instalada: {APP_VERSION}\nUltima release: {tag}"
             if info.get("asset_name"):
                 message += f"\nAppImage: {info['asset_name']}"
-            if normalize_command(tag) and tag != APP_VERSION:
+            if tag and is_newer_version(tag, APP_VERSION):
                 reply = QtWidgets.QMessageBox.question(
                     self,
                     "Actualizacion disponible",
@@ -4253,44 +4624,57 @@ def qt_main():
             )
 
         def show_about(self):
-            QtWidgets.QMessageBox.information(
-                self,
-                f"Acerca de {APP_NAME}",
+            history = [
+                ("0.10.2", "Opciones manuales por categorias con papelera/restauracion, Acerca de desplazable, tabs sin rueda y modo compacto mas estricto."),
+                ("0.10.1", "Buscar actualizacion tolera repos sin releases y los recuadros ganan espacio para no pisar texto."),
+                ("0.10.0", "Modo compacto, solo lectura, panel redimensionable, diagnostico HDR/VRR, historial Proton y acciones AppImage/update."),
+                ("0.9.1", "Layout responsive para evitar cortes en pantallas mas estrechas."),
+                ("0.9.0", "Gestion de Proton por juego, recomendaciones, pestanas y builder AppImage."),
+                ("0.8.9", "Cambios pendientes, comparar, diagnostico, historial y asistente de perfil."),
+                ("0.8.8", "Estado de preset aplicado separado del preset seleccionado pendiente."),
+                ("0.8.7", "Iconos para ejecutables externos y comandos manuales guardados como presets custom."),
+                ("0.8.6", "Recuerda el preset exacto aplicado y avisa en rojo si hay uno pendiente."),
+                ("0.8.5", "Selector de presets carga opciones automaticamente y aplicar pide confirmacion."),
+                ("0.8.4", "Corrige listado inicial para mostrar todos los juegos detectados."),
+                ("0.8.3", "Preset recomendado del sistema, panel de juego claro y gestion de manuales."),
+                ("0.8.2", "Tarjetas HDR/VRR, badge ProtonDB y recomendaciones VRR/Adaptive en rojo de prueba."),
+                ("0.8.1", "Recomendadas amarillas, ratings ProtonDB en juegos y accesos directos Steam externos."),
+                ("0.8.0", "Presets compartidos, controles sin rueda accidental, lanzamiento Steam y resumen ProtonDB oficial."),
+                ("0.7.9", "VRR cap usa limitador MangoHud porque Gamescope redondea a divisores."),
+                ("0.7.8", "VRR cap automatico usando Hz aplicados."),
+                ("0.7.7", "Resolucion Gamescope solo cambia al aplicarla y pruebas de presets."),
+                ("0.7.6", "Presets aplican opciones reconstruidas y recuerdan acciones como HDR Unreal."),
+                ("0.7.5", "Las recomendaciones ya no se autoactivan al recargar un juego."),
+                ("0.7.4", "Ruta Steam configurable y guardado seguro cerrando/reabriendo Steam."),
+                ("0.7.3", "Actualizar presets, confirmaciones, botones con borde y ejecutables externos con Proton detectable o manual."),
+                ("0.7.2", "Opciones en lista vertical, iconos de juegos, juegos manuales y botones de accion claros."),
+                ("0.7.1", "Layout de escritorio mas ancho, lista fija y opciones sin corte horizontal."),
+                ("0.7.0", "Resolucion real Gamescope, deteccion de monitor y presets nativos."),
+                ("0.6.0", "Bazzite/SteamOS handheld, Legion Go 2, 800p/1200p y limites FPS."),
+                ("0.5.0", "Logo, nombre, recomendaciones del sistema, hover help y README."),
+                ("0.4.0", "Interfaz PySide6 mas clara."),
+                ("0.3.0", "ProtonDB, personalizados y presets."),
+                ("0.2.0", "HDR, GameMode, MangoHud y Gamescope."),
+                ("0.1.0", "Tool inicial con Zenity."),
+            ]
+            dialog = QtWidgets.QDialog(self)
+            dialog.setWindowTitle(f"Acerca de {APP_NAME}")
+            dialog.resize(760, 560)
+            layout = QtWidgets.QVBoxLayout(dialog)
+            text = QtWidgets.QPlainTextEdit()
+            text.setReadOnly(True)
+            text.setPlainText(
                 f"{APP_NAME} {APP_VERSION}\n\n"
-                "Historial:\n"
-                "0.1.0 - Tool inicial con Zenity.\n"
-                "0.2.0 - HDR, GameMode, MangoHud y Gamescope.\n"
-                "0.3.0 - ProtonDB, personalizados y presets.\n"
-                "0.4.0 - Interfaz PySide6 mas clara.\n"
-                "0.5.0 - Logo, nombre, recomendaciones del sistema, hover help y README.\n"
-                "0.6.0 - Bazzite/SteamOS handheld, Legion Go 2, 800p/1200p y limites FPS.\n"
-                "0.7.0 - Resolucion real Gamescope, deteccion de monitor y presets nativos.\n"
-                "0.7.1 - Layout de escritorio mas ancho, lista fija y opciones sin corte horizontal.\n"
-                "0.7.2 - Opciones en lista vertical, iconos de juegos, juegos manuales y botones de accion claros.\n"
-                "0.7.3 - Actualizar presets, confirmaciones, botones con borde y ejecutables externos con Proton detectable o manual.\n"
-                "0.7.4 - Ruta Steam configurable y guardado seguro cerrando/reabriendo Steam.\n"
-                "0.7.5 - Las recomendaciones ya no se autoactivan al recargar un juego.\n"
-                "0.7.6 - Presets aplican opciones reconstruidas y recuerdan acciones como HDR Unreal.\n"
-                "0.7.7 - Resolucion Gamescope solo cambia al aplicarla y pruebas de presets.\n"
-                "0.7.8 - VRR cap automatico usando Hz aplicados.\n"
-                "0.7.9 - VRR cap usa limitador MangoHud porque Gamescope redondea a divisores.\n"
-                "0.8.0 - Presets compartidos, controles sin rueda accidental, lanzamiento Steam y resumen ProtonDB oficial.\n"
-                "0.8.1 - Recomendadas amarillas, ratings ProtonDB en juegos y accesos directos Steam externos.\n"
-                "0.8.2 - Tarjetas HDR/VRR, badge ProtonDB y recomendaciones VRR/Adaptive en rojo de prueba.\n"
-                "0.8.3 - Preset recomendado del sistema, panel de juego claro y gestion de manuales.\n"
-                "0.8.4 - Corrige listado inicial para mostrar todos los juegos detectados.\n"
-                "0.8.5 - Selector de presets carga opciones automaticamente y aplicar pide confirmacion.\n"
-                "0.8.6 - Recuerda el preset exacto aplicado y avisa en rojo si hay uno pendiente.\n"
-                "0.8.7 - Iconos para ejecutables externos y comandos manuales guardados como presets custom.\n"
-                "0.8.8 - Estado de preset aplicado separado del preset seleccionado pendiente.\n"
-                "0.8.9 - Cambios pendientes, comparar, diagnostico, historial y asistente de perfil.\n"
-                "0.9.0 - Gestion de Proton por juego, recomendaciones, pestanas y builder AppImage.\n"
-                "0.9.1 - Layout responsive para evitar cortes en pantallas mas estrechas.\n"
-                "0.10.0 - Modo compacto, solo lectura, panel redimensionable, diagnostico HDR/VRR, historial Proton y acciones AppImage/update.\n"
-                "0.10.1 - Buscar actualizacion tolera repos sin releases y los recuadros ganan espacio para no pisar texto.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
-                f"README:\n{APP_DIR / 'README.md'}"
+                f"README:\n{APP_DIR / 'README.md'}\n\n"
+                "Historial, de mas nuevo a mas viejo:\n\n"
+                + "\n".join(f"{version} - {note}" for version, note in history)
             )
+            layout.addWidget(text, 1)
+            close_btn = QtWidgets.QPushButton("Cerrar")
+            close_btn.clicked.connect(dialog.accept)
+            layout.addWidget(close_btn, 0, QtCore.Qt.AlignRight)
+            dialog.exec()
 
         def show_recommendations(self):
             if not self.current_game:

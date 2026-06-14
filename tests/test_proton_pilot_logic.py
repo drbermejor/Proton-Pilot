@@ -31,6 +31,27 @@ class ProtonPilotLogicTests(unittest.TestCase):
         self.assertEqual(command, "%command%")
         self.assertIn("UEHDR", proton_pilot.SIDE_EFFECT_OPTIONS)
 
+    def test_custom_launch_option_can_add_pre_gamescope_and_post_args(self):
+        option = {
+            "id": "custom-test",
+            "pre": "PROTON_LOG=1",
+            "gamescope": "--expose-wayland",
+            "post": "-NoLauncher",
+        }
+        key = proton_pilot.custom_option_key(option)
+
+        command = proton_pilot.compose_launch([key], "", "", {}, [option])
+
+        self.assertIn("PROTON_LOG=1", command)
+        self.assertIn("gamescope -f --expose-wayland --", command)
+        self.assertIn("%command% -NoLauncher", command)
+        self.assertTrue(proton_pilot.custom_option_matches_command(option, command))
+
+    def test_update_check_only_treats_higher_version_as_newer(self):
+        self.assertTrue(proton_pilot.is_newer_version("0.10.3", "0.10.2"))
+        self.assertFalse(proton_pilot.is_newer_version("0.10.1", "0.10.2"))
+        self.assertFalse(proton_pilot.is_newer_version("0.10.2", "0.10.2"))
+
     def test_detect_gamescope_resolution(self):
         command = "gamescope -f --force-windows-fullscreen -W 2560 -H 1440 -w 2560 -h 1440 -r 180 -- %command%"
 
