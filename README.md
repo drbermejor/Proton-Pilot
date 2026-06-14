@@ -216,6 +216,41 @@ HDR on handheld Linux setups is still game, compositor, display, and OS-version
 dependent. The HDR preset enables the launch path, but you may still need HDR
 enabled in the OS/session and in the game.
 
+## Gaming Mode Status And Roadmap
+
+Current support target:
+
+- Configure games from Desktop Mode.
+- Save Steam launch options, Proton version, presets, HDR/VRR/Gamescope settings,
+  and diagnostics from Proton Pilot.
+- Return to Steam Gaming Mode and launch the game from Steam.
+
+This is the recommended flow for Bazzite/SteamOS handhelds because Steam Gaming
+Mode is a minimal Steam session intended for controller-first game launching.
+Proton Pilot's current Qt interface is a desktop GUI, so it is not yet considered
+fully controller-native inside Gaming Mode.
+
+Possible today, but not officially polished:
+
+- Add the AppImage as a non-Steam app and launch Proton Pilot from Gaming Mode.
+- Use touch/mouse/keyboard to change settings.
+
+Known limitations for running the app itself inside Gaming Mode:
+
+- Controller navigation is not designed yet.
+- Qt file pickers and confirmation dialogs may be awkward inside Gamescope.
+- Closing/reopening Steam from inside the Steam Gaming Mode session is risky and
+  should be avoided.
+- The UI is still denser than a handheld-first flow should be.
+
+Future Gaming Mode work:
+
+- Add a dedicated `Handheld UI` mode with large controls and fewer panels.
+- Provide a controller-friendly wizard: game, goal, Proton, apply.
+- Avoid automatic Steam shutdown when Gaming Mode is detected.
+- Add an optional helper to register the AppImage as a non-Steam app.
+- Add a read-only quick status view suitable for launching from Gaming Mode.
+
 ## Uninstall
 
 ```bash
@@ -454,5 +489,5 @@ support or game-specific configuration.
   diagnostics, per-game launch history/restore, ProtonDB cache refresh details,
   and a goal-based profile assistant.
 - 0.9.0: Adds per-game Proton display/change support, Proton recommendations,
-  a tabbed interface to reduce clutter, and an AppImage builder alongside the
-  existing installer.
+  a tabbed interface to reduce clutter, an AppImage builder alongside the
+  existing installer, and documents the future Gaming Mode handheld UI roadmap.
