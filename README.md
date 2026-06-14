@@ -258,11 +258,59 @@ Implemented safety for Gaming Mode:
 - It avoids automatic Steam shutdown when Gaming Mode is detected.
 - It includes read-only mode and an AppImage registration button.
 
-Future Gaming Mode work:
+## Planned Handheld Mode
 
-- Add a dedicated `Handheld UI` mode with large controls and fewer panels.
-- Provide a controller-friendly wizard: game, goal, Proton, apply.
-- Improve controller navigation and focus order inside Gamescope.
+The current handheld support is profile-oriented: Proton Pilot detects handheld
+setups, provides handheld presets, marks safer options, and avoids risky Steam
+shutdown behavior in Gaming Mode. A true handheld mode is planned as a second UI
+on top of the existing logic, not as a rewrite of the app.
+
+Target behavior:
+
+- Start with `proton-pilot --handheld`.
+- Auto-open this view when a likely Steam Gaming Mode session is detected.
+- Use a controller/touch-friendly flow: `Game -> Profile -> Proton -> Review -> Apply`.
+- Keep the desktop UI available for advanced editing and diagnostics.
+
+Planned first version:
+
+- Large game list with icons and ProtonDB rating colors.
+- Big action buttons and clear focus outlines.
+- Profile cards for `Battery`, `Balanced`, `Performance`, `HDR`, `VRR stable`,
+  `FSR4 experimental`, and `Safe`.
+- Proton selector with the currently applied version and the recommended
+  installed version.
+- Review screen showing game, selected profile, Proton, resolution, FPS cap,
+  HDR/VRR state, and the final command.
+- One clear `Apply` action with confirmation.
+- Read-only default when launched from Gaming Mode while Steam is running.
+
+Controller/navigation requirements:
+
+- D-pad/arrow navigation between cards and buttons.
+- `A`/Enter to confirm.
+- `B`/Escape to go back.
+- No accidental changes from scroll wheels or hidden focus.
+- No required text entry for the basic flow.
+
+Safety requirements:
+
+- Do not automatically close Steam from inside Gaming Mode.
+- If Steam-writing changes are unsafe, explain that they should be applied from
+  Desktop Mode or after closing Steam manually.
+- Avoid Qt file pickers in the handheld flow.
+- Keep advanced actions such as custom paths, manual executable selection, and
+  raw command editing in the desktop UI.
+
+Test targets before calling it supported:
+
+- Desktop Mode on CachyOS/KDE.
+- Bazzite Desktop Mode.
+- Bazzite Gaming Mode launched as a non-Steam AppImage.
+- Legion Go 2 style 1920x1200 handheld profile.
+- Legion Go S / SteamOS-style 800p profile.
+- Focus/navigation behavior with keyboard, controller-mapped keyboard events,
+  and touch.
 
 ## Uninstall
 
