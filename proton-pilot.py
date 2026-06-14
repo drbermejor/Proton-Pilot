@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.8.5"
+APP_VERSION = "0.8.6"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
     APP_DIR / "assets/proton-pilot.png",
@@ -1669,6 +1669,11 @@ def qt_main():
                     padding: 6px;
                     font-weight: 800;
                 }
+                QLabel#presetStatus[pending="true"] {
+                    color: #8a1c1c;
+                    background: #ffebee;
+                    border: 1px solid #ef5350;
+                }
                 QFrame#hero {
                     background: #eef7f2;
                     border: 1px solid #b7dfc5;
@@ -2664,10 +2669,26 @@ def qt_main():
                 )
             return preset.get("command", "")
 
+        def set_preset_status(self, text, pending=False):
+            self.current_preset_label.setProperty("pending", "true" if pending else "false")
+            self.current_preset_label.style().unpolish(self.current_preset_label)
+            self.current_preset_label.style().polish(self.current_preset_label)
+            self.current_preset_label.setText(text)
+
+        def preset_matches_command(self, ref, command):
+            _, _, preset = self.preset_from_ref(ref)
+            return bool(preset and normalize_command(self.preset_command(preset)) == normalize_command(command))
+
         def matching_preset_ref(self, command):
             wanted = normalize_command(command)
             if not wanted:
                 return "", ""
+            if self.current_game:
+                custom = self.app_config.setdefault("custom", {}).get(self.current_game["appid"], {})
+                preferred = custom.get("applied_preset_ref", "")
+                if preferred and self.preset_matches_command(preferred, command):
+                    _, name = split_preset_ref(preferred)
+                    return preferred, name
             for scope, presets in (("shared", self.shared_presets()), ("game", self.game_presets())):
                 for name, preset in presets.items():
                     if normalize_command(self.preset_command(preset)) == wanted:
@@ -2682,10 +2703,10 @@ def qt_main():
                 index = self.preset_combo.findData(ref)
                 if index >= 0:
                     self.preset_combo.setCurrentIndex(index)
-                self.current_preset_label.setText(f"Preset actual aplicado: {name}")
+                self.set_preset_status(f"Preset actual aplicado: {name}", pending=False)
             else:
                 self.preset_combo.setCurrentIndex(-1)
-                self.current_preset_label.setText("Preset actual: no coincide con ningun preset guardado")
+                self.set_preset_status("Preset actual: no coincide con ningun preset guardado", pending=True)
             self.preset_combo.blockSignals(False)
             self.apply_preset_btn.setEnabled(False)
 
@@ -2729,10 +2750,10 @@ def qt_main():
                 command = preset.get("command", "")
                 self.command_edit.setPlainText(command)
             if ref == self.current_applied_preset_ref:
-                self.current_preset_label.setText(f"Preset actual aplicado: {name}")
+                self.set_preset_status(f"Preset actual aplicado: {name}", pending=False)
                 self.apply_preset_btn.setEnabled(False)
             else:
-                self.current_preset_label.setText(f"Preset seleccionado pendiente de aplicar: {name}")
+                self.set_preset_status(f"Preset seleccionado pendiente de aplicar: {name}", pending=True)
                 self.apply_preset_btn.setEnabled(True)
             return ref, name
 
@@ -2750,6 +2771,9 @@ def qt_main():
             )
             if reply != QtWidgets.QMessageBox.Yes:
                 return
+            custom = self.app_config.setdefault("custom", {}).setdefault(self.current_game["appid"], {})
+            custom["applied_preset_ref"] = ref
+            save_app_config(self.app_config)
             self.save(confirm=False)
 
         def save_preset(self):
@@ -2919,7 +2943,8 @@ def qt_main():
                 "0.8.2 - Tarjetas HDR/VRR, badge ProtonDB y recomendaciones VRR/Adaptive en rojo de prueba.\n"
                 "0.8.3 - Preset recomendado del sistema, panel de juego claro y gestion de manuales.\n"
                 "0.8.4 - Corrige listado inicial para mostrar todos los juegos detectados.\n"
-                "0.8.5 - Selector de presets carga opciones automaticamente y aplicar pide confirmacion.\n\n"
+                "0.8.5 - Selector de presets carga opciones automaticamente y aplicar pide confirmacion.\n"
+                "0.8.6 - Recuerda el preset exacto aplicado y avisa en rojo si hay uno pendiente.\n\n"
                 f"Config:\n{APP_CONFIG_FILE}\n\n"
                 f"README:\n{APP_DIR / 'README.md'}"
             )
@@ -2972,6 +2997,12 @@ def qt_main():
             custom["post"] = self.custom_post.text()
             custom["gamescope_res"] = self.gamescope_resolution()
             custom["side_effect_options"] = [key for key in self.selected_keys() if key in SIDE_EFFECT_OPTIONS]
+            command = self.command_edit.toPlainText().strip()
+            current_ref = self.preset_combo.currentData() or ""
+            if current_ref and self.preset_matches_command(current_ref, command):
+                custom["applied_preset_ref"] = current_ref
+            elif custom.get("applied_preset_ref") and not self.preset_matches_command(custom["applied_preset_ref"], command):
+                custom.pop("applied_preset_ref", None)
             save_app_config(self.app_config)
 
         def save(self, checked=False, confirm=True):
