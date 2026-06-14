@@ -58,7 +58,9 @@ tocar `localconfig.vdf`.
 - Detects Bazzite, SteamOS-style sessions, Lenovo Legion Go devices, and handheld-friendly setups.
 - Detects the primary monitor resolution and can force Gamescope to expose the real physical resolution to the game.
 - Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
-- Provides an automatic shared `Recomendado del sistema` preset based on detected hardware and session.
+- Provides an automatic shared system-recommended preset based on detected
+  hardware and session. Existing configs may still store its preset name as
+  `Recomendado del sistema`.
 - Lets you create, load, update, and delete your own shared presets.
 - Lets you create user-defined launch option toggles, place them in the existing
   categories, delete them to a restoreable trash list, and restore them later.
@@ -391,29 +393,32 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
 - External executable icons are extracted from the `.exe` when `icoutils` is
   installed; otherwise Proton Pilot falls back to the generic icon.
 - Launch options are displayed as a vertical list so each option is easier to scan.
-- Built-in launch options use action-oriented labels such as `Activar GameMode`,
-  `Forzar resolucion nativa en Gamescope`, or `Limitar FPS para VRR`.
-- `Añadir opcion` opens a wizard for creating reusable user-defined toggles. Each
+- In English, built-in launch options use action-oriented labels such as
+  `Enable GameMode`, `Force native resolution in Gamescope`, or
+  `Limit FPS for VRR`. In Spanish, the same controls appear as
+  `Activar GameMode`, `Forzar resolucion nativa en Gamescope`, and
+  `Limitar FPS para VRR`.
+- `Add option` opens a wizard for creating reusable user-defined toggles. Each
   custom option can add parameters before `%command%`, Gamescope arguments, and
   parameters after `%command%`.
-- Launch options are grouped by goal: `Base y rendimiento`,
-  `Gamescope, pantalla y VRR`, `HDR`, `Escalado y handheld`,
-  `Compatibilidad avanzada`, and `Personalizadas / otros`.
-- User-defined launch options live in those same categories. `Borrar opcion
-  manual` moves them to a trash list, and `Restaurar opcion` brings them back
+- Launch options are grouped by goal: `Base and performance`,
+  `Gamescope, display and VRR`, `HDR`, `Scaling and handheld`,
+  `Advanced compatibility`, and `Custom / other`.
+- User-defined launch options live in those same categories. `Trash` moves them
+  to a restoreable trash list, and `Restore` brings them back
   later.
-- `Guardar comando manual` is highlighted in green. It is meant for cases where
-  you edit the `Comando final` text directly; Proton Pilot will offer to create
+- `Save manual command` is meant for cases where you edit the `Final command`
+  text directly; Proton Pilot will offer to create
   a per-game custom preset for that exact command.
-- `Borrar opciones` is highlighted in red and asks for confirmation before clearing
+- `Clear options` is highlighted in red and asks for confirmation before clearing
   the saved Steam launch options for the selected game.
 - The selected game panel shows the currently saved launch command and whether it
   matches a saved preset.
-- Selecting a preset loads its options immediately. `Aplicar preset` is only
+- Selecting a preset loads its options immediately. `Apply preset` is only
   needed when you want to save that selected preset to the game.
 - The selected-game panel warns immediately when no preset is applied. Pending
   preset selections are shown inside the preset box, next to the selector and
-  `Aplicar preset`.
+  `Apply preset`.
 - The selected-game panel shows the current Proton/compatibility tool and lets
   you switch to Steam default or an installed Proton build.
 - The main workspace is split into tabs: summary, presets, launch options, and
@@ -424,32 +429,32 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
   groups to reduce visual noise.
 - The selected-game panel also warns when the command prepared on screen differs
   from the command already saved for that game.
-- `Comparar` shows saved launch options next to the prepared command.
-- `Historial` can restore one of the previous commands saved before an overwrite
+- `Compare` shows saved launch options next to the prepared command.
+- `History` can restore one of the previous commands saved before an overwrite
   or clear operation.
-- `Historial Proton` can restore a previously used Proton compatibility tool if
+- `Proton history` can restore a previously used Proton compatibility tool if
   that Proton version is still installed.
-- `Aplicar cambios preparados` writes the command currently visible on screen.
-- `Modo compacto` hides technical descriptions and shortens the command summary
+- `Apply prepared changes` writes the command currently visible on screen.
+- `Compact mode` hides technical descriptions and shortens the command summary
   for smaller screens. It also hides the advanced tab and collapses option groups
   so the first screen is more focused.
-- `Solo lectura` lets you inspect games, presets, ProtonDB, diagnostics, and
+- `Read only` lets you inspect games, presets, ProtonDB, diagnostics, and
   commands without writing to Steam or changing presets.
-- `Asistente perfil` marks options for a selected goal, then leaves the command
+- `Profile assistant` marks options for a selected goal, then leaves the command
   on screen for review before applying.
 - If multiple presets generate the same launch command, Proton Pilot remembers
   the exact preset you applied for that game and selects it again when you
   return to the game.
 - Launch options are grouped into collapsible goal-oriented sections.
-- The `Resumen/Presets/Opciones/Avanzado` tab bar ignores mouse-wheel events so
+- The `Summary/Presets/Options/Advanced` tab bar ignores mouse-wheel events so
   scrolling over the tab bar no longer changes tabs by accident.
 
 ## External Executables
 
-The `Añadir juego` button supports two paths:
+The `Add game` button supports two paths:
 
 - `Steam AppID`: adds a Steam game manually when local manifest detection misses it.
-- `Ejecutable Proton`: selects a Windows `.exe`/`.msi`, chooses an installed Proton
+- `Proton executable`: selects a Windows `.exe`/`.msi`, chooses an installed Proton
   build or a custom Proton path, and stores a local Proton Pilot profile.
 
 External executable profiles do not write to Steam's `localconfig.vdf`. They are
@@ -474,13 +479,14 @@ Gamescope to expose the real monitor resolution using:
 gamescope -f --force-windows-fullscreen -W 2560 -H 1440 -w 2560 -h 1440 -r 180 -- ...
 ```
 
-Use the `Resolucion real Gamescope` option and press `Usar monitor principal`.
-The app will fill the detected width, height, and refresh rate. It also creates
-a per-game preset named `Monitor nativo Gamescope: <resolution>`.
+Use the `Force native resolution in Gamescope` option and press
+`Use primary monitor`. The app will fill the detected width, height, and refresh
+rate. It also creates a per-game preset; existing configs may store that preset
+name as `Monitor nativo Gamescope: <resolution>`.
 
 ## VRR FPS Cap
 
-Use `VRR cap automatico` with Gamescope/Adaptive Sync to cap FPS just below the
+Use `Limit FPS for VRR` with Gamescope/Adaptive Sync to cap FPS just below the
 applied refresh rate. Proton Pilot uses `Hz - 3`, so a 180 Hz display becomes:
 
 ```bash
@@ -492,8 +498,8 @@ as a divisor of the refresh rate on the tested local version, so `177` on a
 180 Hz display can behave like 180.
 
 The cap uses the refresh value currently applied in the Gamescope resolution
-section. Press `Aplicar resolucion` or `Usar monitor principal` before saving if
-you changed the Hz fields.
+section. Press `Apply resolution` or `Use primary monitor` before saving if you
+changed the Hz fields.
 
 ## Usability Notes
 
@@ -503,15 +509,16 @@ width/height/Hz fields. New presets created from the GUI are shared by default
 and can be loaded for any game.
 
 Yellow launch options are recommended or important for the detected system.
-`Marcar recomendadas` enables those detected recommendations in the UI, but it
+`Mark recommended` enables those detected recommendations in the UI, but it
 does not write anything to Steam until you create/update/apply a preset or save a
 manual command.
 Red launch options are useful but experimental or game-sensitive; Proton Pilot
 may still recommend them when the system supports them, but they should be
 validated per game.
 
-`Gamescope fullscreen` starts the game inside Gamescope. `Resolucion real
-Gamescope` is the mode-setting layer on top of that: it supplies the monitor's
+`Use Gamescope fullscreen` starts the game inside Gamescope.
+`Force native resolution in Gamescope` is the mode-setting layer on top of that:
+it supplies the monitor's
 real width, height, and refresh rate with `-W/-H/-w/-h/-r`.
 
 ## Important Notes
@@ -557,11 +564,11 @@ support or game-specific configuration.
 - 0.7.6: Fixed preset application using stale stored commands and persisted
   side-effect options such as Unreal HDR tweaks per game.
 - 0.7.7: Gamescope resolution fields now affect the command only after pressing
-  `Aplicar resolucion` or `Usar monitor principal`, and preset logic has
-  regression tests.
-- 0.7.8: Added `VRR cap automatico`, which derives a Gamescope FPS cap from the
+  `Apply resolution` or `Use primary monitor`, and preset logic has regression
+  tests.
+- 0.7.8: Added `Limit FPS for VRR`, which derives a Gamescope FPS cap from the
   applied monitor refresh rate.
-- 0.7.9: Changed `VRR cap automatico` to use MangoHud's FPS limiter instead of
+- 0.7.9: Changed `Limit FPS for VRR` to use MangoHud's FPS limiter instead of
   Gamescope's divisor-based limiter.
 - 0.8.0: Added shared user presets, disabled accidental mouse-wheel changes on
   preset and resolution controls, enabled launching Steam games from the GUI,
