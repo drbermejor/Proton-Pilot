@@ -109,8 +109,8 @@ OPTION_INFO = {
     },
     "HDR": {
         "label": "Activar HDR con Gamescope",
-        "description": "Activa salida HDR dentro de Gamescope y expone HDR a DXVK con ENABLE_GAMESCOPE_WSI=1 y DXVK_HDR=1. Necesita que Gamescope HDR/WSI este disponible.",
-        "tokens": "ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope --hdr-enabled",
+        "description": "Ruta principal para HDR en Proton: activa Gamescope HDR, Gamescope WSI y HDR WSI para que el juego pueda ver una pantalla HDR.",
+        "tokens": "ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope --hdr-enabled",
         "recommended": False,
         "important": True,
     },
@@ -279,7 +279,7 @@ OPTION_LABEL_EN = {
 OPTION_DESCRIPTION_EN = {
     "GAMEMODE": "Enables GameMode so the system uses a performance profile while the game is running.",
     "MANGOHUD": "Shows the FPS, frametime, GPU/CPU and temperature overlay. With Gamescope it is applied as --mangoapp. In game: Right Shift + F12 toggles the overlay.",
-    "HDR": "Enables HDR output inside Gamescope and exposes HDR to DXVK with ENABLE_GAMESCOPE_WSI=1 and DXVK_HDR=1. Requires Gamescope HDR/WSI support.",
+    "HDR": "Main HDR path for Proton: enables Gamescope HDR, Gamescope WSI and HDR WSI so the game can see an HDR display.",
     "WAYLAND": "Forces Wine/Proton's Wayland driver. It can improve Wayland integration, but some games may lose overlays or input behavior.",
     "PROTONHDR": "Enables Proton's own HDR flag when your Proton build supports it. It complements Gamescope HDR; it does not replace it.",
     "FSR4": "Attempts to upgrade FSR 3.1 to FSR 4 on Proton/GE/Cachy builds that support it. Requires a compatible game, GPU and driver; it is not universal.",
@@ -548,7 +548,7 @@ def ensure_builtin_presets(config):
             "options": ["HDR", "GAMEMODE", "MANGOHUD", "UEHDR"],
             "custom_pre": "",
             "custom_post": "",
-            "command": "ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f --hdr-enabled --mangoapp -- gamemoderun %command%",
+            "command": "ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f --hdr-enabled --mangoapp -- gamemoderun %command%",
         },
         "FSR4 + Wayland literal": {
             "options": ["FSR4", "WAYLAND"],
@@ -560,7 +560,7 @@ def ensure_builtin_presets(config):
             "options": ["FSR4", "WAYLAND", "PROTONHDR", "HDR", "GAMEMODE", "MANGOHUD"],
             "custom_pre": "",
             "custom_post": "",
-            "command": "PROTON_FSR4_UPGRADE=1 PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f --hdr-enabled --mangoapp -- gamemoderun %command%",
+            "command": "PROTON_FSR4_UPGRADE=1 PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f --hdr-enabled --mangoapp -- gamemoderun %command%",
         },
     }
     for name, payload in builtins.items():
@@ -592,7 +592,7 @@ def ensure_game_builtin_presets(config, appid):
             "options": ["HDR", "PROTONHDR", "HANDHELD1200P", "ADAPTIVE", "GAMEMODE", "MANGOHUD"],
             "custom_pre": "",
             "custom_post": "",
-            "command": "PROTON_ENABLE_HDR=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f -w 1920 -h 1200 --hdr-enabled --mangoapp --adaptive-sync -- gamemoderun %command%",
+            "command": "PROTON_ENABLE_HDR=1 ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f -w 1920 -h 1200 --hdr-enabled --mangoapp --adaptive-sync -- gamemoderun %command%",
         },
         "Legion Go 2 FSR4 + Wayland": {
             "options": ["FSR4", "WAYLAND", "HANDHELD800P", "CAP72", "GAMEMODE", "MANGOHUD"],
@@ -1667,7 +1667,7 @@ def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None, 
     if "FSR4IND" in selected:
         parts.append("PROTON_FSR4_INDICATOR=1")
     if "HDR" in selected:
-        parts.extend(["ENABLE_GAMESCOPE_WSI=1", "DXVK_HDR=1"])
+        parts.extend(["ENABLE_HDR_WSI=1", "ENABLE_GAMESCOPE_WSI=1", "DXVK_HDR=1"])
     if "NODXR" in selected:
         parts.append("VKD3D_CONFIG=nodxr")
     elif "RT" in selected:

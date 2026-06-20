@@ -76,7 +76,7 @@ class ProtonPilotLogicTests(unittest.TestCase):
         )
 
     def test_detect_flags_do_not_infer_recommended_options(self):
-        command = "ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f --hdr-enabled -- %command%"
+        command = "ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f --hdr-enabled -- %command%"
         flags = proton_pilot.detect_flags(command)
 
         self.assertTrue(flags["HDR"])
