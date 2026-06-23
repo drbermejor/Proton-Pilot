@@ -8,7 +8,7 @@
   <strong>Per-game Steam/Proton launch profile manager for Linux gaming.</strong>
 </p>
 
-Version: 0.10.5
+Version: 0.11.0
 
 Documentation:
 
@@ -52,19 +52,26 @@ tocar `localconfig.vdf`.
 - Shows clear system status cards for display resolution, HDR, VRR, GPU, tools,
   and Gaming Mode/Desktop Mode.
 - Provides a compact mode for smaller screens and a read-only mode for safe
-  inspection without writing launch options or presets.
+  inspection without writing launch options or profiles.
 - Provides a persistent English/Spanish language toggle covering the main
   interface, option descriptions, tooltips, status panels, and common dialogs.
 - Detects Bazzite, SteamOS-style sessions, Lenovo Legion Go devices, and handheld-friendly setups.
 - Detects the primary monitor resolution and can force Gamescope to expose the real physical resolution to the game.
-- Provides built-in per-game presets and user-created shared presets stored in a JSON config file.
-- Provides an automatic shared system-recommended preset based on detected
-  hardware and session. Existing configs may still store its preset name as
+- Provides built-in per-game profiles and user-created shared profiles stored in a JSON config file.
+- Provides an automatic shared system-recommended profile based on detected
+  hardware and session. Existing configs may still store its profile name as
   `Recomendado del sistema`.
-- Lets you create, load, update, and delete your own shared presets.
+- Lets you create, load, update, duplicate, and delete your own profiles.
 - Lets you create user-defined launch option toggles, place them in the existing
   categories, delete them to a restoreable trash list, and restore them later.
-- Lets you save a manually edited final command as a per-game custom preset.
+- Lets you save a manually edited final command as a per-game custom profile.
+- When a manually edited command differs from the selected profile, asks whether
+  to update that recognized profile or create a new one.
+- Detects when the real Steam command does not match any saved profile and lets
+  you import it as a profile, overwrite it with the selected profile, or compare
+  differences.
+- Shows each game list entry as no profile, applied profile, pending changes, or
+  manual command.
 - Shows when the prepared command differs from the command currently saved for
   the selected game.
 - Provides a compare view for saved vs prepared launch options.
@@ -409,21 +416,21 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
   later.
 - `Save manual command` is meant for cases where you edit the `Final command`
   text directly; Proton Pilot will offer to create
-  a per-game custom preset for that exact command.
+  a per-game custom profile for that exact command.
 - `Clear options` is highlighted in red and asks for confirmation before clearing
   the saved Steam launch options for the selected game.
-- The selected game panel shows the currently saved launch command and whether it
-  matches a saved preset.
-- Selecting a preset loads its options immediately. `Apply preset` is only
-  needed when you want to save that selected preset to the game.
-- The selected-game panel warns immediately when no preset is applied. Pending
-  preset selections are shown inside the preset box, next to the selector and
-  `Apply preset`.
+- The selected game panel shows the real saved Steam command and whether it
+  matches a saved profile.
+- Selecting a profile loads its options immediately. `Apply this profile` is only
+  needed when you want to save that selected profile to the game.
+- The selected-game panel warns immediately when no profile is applied. Pending
+  profile selections are shown inside the profile box, next to the selector and
+  `Apply this profile`.
 - The selected-game panel shows the current Proton/compatibility tool and lets
   you switch to Steam default or an installed Proton build.
-- The main workspace is split into tabs: summary, presets, launch options, and
+- The main workspace is split into tabs: summary, profile, launch options, and
   advanced command/resolution controls.
-- The summary, actions, preset, Proton, and Gamescope resolution controls wrap
+- The summary, actions, profile, Proton, and Gamescope resolution controls wrap
   into multiple rows on narrower screens to avoid clipped content.
 - Frequent actions and diagnostic/maintenance tools are separated into different
   groups to reduce visual noise.
@@ -438,15 +445,15 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
 - `Compact mode` hides technical descriptions and shortens the command summary
   for smaller screens. It also hides the advanced tab and collapses option groups
   so the first screen is more focused.
-- `Read only` lets you inspect games, presets, ProtonDB, diagnostics, and
-  commands without writing to Steam or changing presets.
+- `Read only` lets you inspect games, profiles, ProtonDB, diagnostics, and
+  commands without writing to Steam or changing profiles.
 - `Profile assistant` marks options for a selected goal, then leaves the command
   on screen for review before applying.
-- If multiple presets generate the same launch command, Proton Pilot remembers
-  the exact preset you applied for that game and selects it again when you
+- If multiple profiles generate the same launch command, Proton Pilot remembers
+  the exact profile you applied for that game and selects it again when you
   return to the game.
 - Launch options are grouped into collapsible goal-oriented sections.
-- The `Summary/Presets/Options/Advanced` tab bar ignores mouse-wheel events so
+- The `Summary/Profile/Options/Advanced` tab bar ignores mouse-wheel events so
   scrolling over the tab bar no longer changes tabs by accident.
 
 ## External Executables
@@ -534,6 +541,19 @@ launcher issues.
 HDR generally needs Gamescope HDR, a working HDR desktop/display path, and game
 support or game-specific configuration.
 
+Proton Pilot only marks the full HDR recommendation automatically when KDE
+reports HDR active, Gamescope is available, and Gamescope WSI is detected. The
+HDR/VRR diagnostic shows the exact recommended toggles for the current system.
+
+`ENABLE_GAMESCOPE_WSI=1` is exposed as its own HDR-related toggle. It is usually
+recommended together with Gamescope HDR, but Proton Pilot keeps it separate
+because games using FSR/frame-generation swapchain paths may show washed-out,
+dark, or incorrect colors when FSR4 and HDR/WSI are combined.
+
+The experimental skip-intro/splash option adds `-nosplash -nostartupscreen`
+after `%command%`. For Dune-style launcher bypasses that require launching a
+different `.exe`, use a game-specific/manual command instead.
+
 ## Iteration History
 
 - 0.1.0: Initial Zenity launch option tool.
@@ -620,3 +640,14 @@ support or game-specific configuration.
 - 0.10.5: Expands the English/Spanish language coverage across the main UI,
   launch-option descriptions, tooltips, status panels, Proton controls,
   preset flows, diagnostics, recommendations, and common confirmation dialogs.
+- 0.10.6: Splits Gamescope WSI into its own HDR option, warns about FSR4 plus
+  HDR/WSI color issues, adds a pending preset apply button near the bottom
+  actions, improves manual-command preset update/create flow, and adds an
+  experimental skip intro/splash launch option.
+- 0.10.7: Expands HDR/VRR diagnostics with practical HDR guidance and system-
+  based HDR recommendations for Gamescope, Gamescope WSI, Proton HDR, and
+  monitor state.
+- 0.11.0: Redesigns the UX around profiles, separates real Steam command,
+  applied profile, selected pending profile and prepared changes, adds manual
+  Steam-command import, profile duplication, discard changes, and per-game
+  state labels.

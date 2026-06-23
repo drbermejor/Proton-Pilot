@@ -16,7 +16,7 @@ from pathlib import Path
 
 HOME = Path.home()
 APP_NAME = "Proton Pilot"
-APP_VERSION = "0.10.5"
+APP_VERSION = "0.11.0"
 APP_REPO = "drbermejor/Proton-Pilot"
 APP_DIR = Path(__file__).resolve().parent
 APP_ICON_CANDIDATES = [
@@ -41,6 +41,7 @@ PROTON_TOOL_DIRS = [
 
 PRESETS = {
     "HDR": "HDR via Gamescope",
+    "GAMESCOPEWSI": "Gamescope WSI para HDR",
     "RT": "Ray Tracing DXR (forzar VKD3D)",
     "NVIDIA": "NVIDIA NVAPI/DLSS",
     "DX12": "Forzar DX12 (-dx12)",
@@ -54,6 +55,7 @@ PRESETS = {
     "PROTONDB": "Abrir ProtonDB del juego",
     "RECOMMEND": "Ver recomendaciones ProtonDB",
     "CUSTOM": "Ajustes personalizados",
+    "NOINTRO": "Saltar intro/splash",
 }
 
 SIDE_EFFECT_OPTIONS = {"UEHDR"}
@@ -109,8 +111,15 @@ OPTION_INFO = {
     },
     "HDR": {
         "label": "Activar HDR con Gamescope",
-        "description": "Ruta principal para HDR en Proton: activa Gamescope HDR, Gamescope WSI y HDR WSI para que el juego pueda ver una pantalla HDR.",
-        "tokens": "ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope --hdr-enabled",
+        "description": "Ruta principal para HDR en Proton: Gamescope crea la salida HDR, HDR WSI la expone al juego y DXVK HDR habilita formatos HDR. Suele combinarse con Proton HDR y Gamescope WSI.",
+        "tokens": "ENABLE_HDR_WSI=1 DXVK_HDR=1 gamescope --hdr-enabled",
+        "recommended": False,
+        "important": True,
+    },
+    "GAMESCOPEWSI": {
+        "label": "Activar Gamescope WSI para HDR",
+        "description": "Expone al juego la capa WSI de Gamescope. Recomendable junto a HDR con Gamescope; se separa para poder desactivarlo si un juego con FSR/frame generation se ve lavado u oscuro.",
+        "tokens": "ENABLE_GAMESCOPE_WSI=1",
         "recommended": False,
         "important": True,
     },
@@ -122,7 +131,7 @@ OPTION_INFO = {
     },
     "PROTONHDR": {
         "label": "Activar HDR de Proton",
-        "description": "Activa el flag HDR propio de Proton si tu build lo soporta. Complementa, no sustituye, Gamescope HDR.",
+        "description": "Activa el flag HDR propio de Proton si tu build lo soporta. Complementa a Gamescope/HDR WSI; por si solo normalmente no basta para que el juego vea HDR.",
         "tokens": "PROTON_ENABLE_HDR=1",
         "recommended": False,
         "important": True,
@@ -233,14 +242,20 @@ OPTION_INFO = {
         "tokens": "Engine.ini [SystemSettings] r.HDR...",
         "recommended": False,
     },
+    "NOINTRO": {
+        "label": "Saltar intro/splash experimental",
+        "description": "Anade argumentos habituales para omitir logos o pantallas iniciales en algunos juegos, incluido Dune. No salta el launcher si el juego necesita ejecutar otro .exe.",
+        "tokens": "%command% -nosplash -nostartupscreen",
+        "recommended": False,
+    },
 }
 
 OPTION_GROUPS = [
     ("Base y rendimiento", ("GAMEMODE", "MANGOHUD", "DX12", "FSR4", "FSR4IND")),
     ("Gamescope, pantalla y VRR", ("GAMESCOPE", "REALRES", "ADAPTIVE", "CAPVRR", "CAP60", "CAP72")),
-    ("HDR", ("HDR", "PROTONHDR", "UEHDR")),
+    ("HDR", ("HDR", "GAMESCOPEWSI", "PROTONHDR", "UEHDR")),
     ("Escalado y handheld", ("HANDHELD800P", "HANDHELD1200P", "GSFSR", "GSNIS")),
-    ("Compatibilidad avanzada", ("WAYLAND", "RT", "NODXR", "NVIDIA")),
+    ("Compatibilidad avanzada", ("WAYLAND", "RT", "NODXR", "NVIDIA", "NOINTRO")),
     ("Personalizadas / otros", ()),
 ]
 OPTION_GROUP_TITLES = [title for title, _keys in OPTION_GROUPS]
@@ -255,6 +270,7 @@ OPTION_LABEL_EN = {
     "GAMEMODE": "Enable GameMode",
     "MANGOHUD": "Show MangoHud",
     "HDR": "Enable HDR with Gamescope",
+    "GAMESCOPEWSI": "Enable Gamescope WSI for HDR",
     "WAYLAND": "Use Proton Wayland",
     "PROTONHDR": "Enable Proton HDR",
     "FSR4": "Try FSR 4 upgrade",
@@ -274,12 +290,14 @@ OPTION_LABEL_EN = {
     "DX12": "Add -dx12",
     "NVIDIA": "Enable NVIDIA DLSS/NVAPI",
     "UEHDR": "Force HDR in Unreal Engine",
+    "NOINTRO": "Skip intro/splash experimental",
 }
 
 OPTION_DESCRIPTION_EN = {
     "GAMEMODE": "Enables GameMode so the system uses a performance profile while the game is running.",
     "MANGOHUD": "Shows the FPS, frametime, GPU/CPU and temperature overlay. With Gamescope it is applied as --mangoapp. In game: Right Shift + F12 toggles the overlay.",
-    "HDR": "Main HDR path for Proton: enables Gamescope HDR, Gamescope WSI and HDR WSI so the game can see an HDR display.",
+    "HDR": "Main HDR path for Proton: enables Gamescope HDR, HDR WSI and DXVK HDR so the game can see an HDR display.",
+    "GAMESCOPEWSI": "Exposes Gamescope's WSI layer to the game. Recommended with Gamescope HDR, but split out because some games with FSR/frame generation can look washed out or too dark.",
     "WAYLAND": "Forces Wine/Proton's Wayland driver. It can improve Wayland integration, but some games may lose overlays or input behavior.",
     "PROTONHDR": "Enables Proton's own HDR flag when your Proton build supports it. It complements Gamescope HDR; it does not replace it.",
     "FSR4": "Attempts to upgrade FSR 3.1 to FSR 4 on Proton/GE/Cachy builds that support it. Requires a compatible game, GPU and driver; it is not universal.",
@@ -299,6 +317,7 @@ OPTION_DESCRIPTION_EN = {
     "DX12": "Adds -dx12 after %command%. Only some games or engines understand it.",
     "NVIDIA": "NVIDIA only: exposes NVAPI/DLSS/NGX to the game. It is usually not useful on AMD.",
     "UEHDR": "Writes HDR variables into Engine.ini and GameUserSettings.ini for Unreal games that do not show HDR in their menu.",
+    "NOINTRO": "Adds common arguments to skip logos or startup screens in some games, including Dune. It does not bypass the launcher when a game needs a different .exe.",
 }
 
 CATEGORY_LABEL_EN = {
@@ -321,7 +340,7 @@ UI_TEXT = {
         "edit_manual": "Editar manual",
         "remove_manual": "Quitar manual",
         "launch": "Iniciar juego",
-        "tabs": ["Resumen", "Presets", "Opciones", "Avanzado"],
+        "tabs": ["Resumen", "Perfil", "Opciones", "Avanzado"],
         "options_box": "Opciones que se aplicaran al lanzamiento",
         "add_option": "+ Opcion manual",
         "delete_option": "Papelera",
@@ -342,7 +361,7 @@ UI_TEXT = {
         "proton_recommended_btn": "Recomendada",
         "apply_proton": "Aplicar Proton",
         "no_pending": "Sin cambios pendientes.",
-        "current_preset_unknown": "Preset actual: sin detectar",
+        "current_preset_unknown": "Perfil actual: sin detectar",
         "protondb_no_data": "ProtonDB: sin datos",
         "system_recs": "Recomendaciones segun tu sistema",
         "status_system": "Sistema",
@@ -371,12 +390,23 @@ UI_TEXT = {
         "register_appimage": "Registrar AppImage",
         "check_updates": "Buscar actualizacion",
         "about": "Acerca de",
-        "presets_box": "Presets del juego",
-        "apply_preset": "Aplicar preset",
-        "create_preset": "Crear nuevo preset",
-        "update_preset": "Actualizar preset",
-        "delete_preset": "Borrar preset",
-        "preset_choose": "Selecciona un preset para cargarlo.",
+        "presets_box": "Perfil del juego",
+        "apply_preset": "Aplicar este perfil",
+        "apply_current_preset": "Aplicar este perfil",
+        "create_preset": "Crear perfil nuevo",
+        "update_preset": "Actualizar perfil actual",
+        "duplicate_preset": "Duplicar perfil",
+        "delete_preset": "Borrar perfil",
+        "preset_choose": "Selecciona un perfil para cargarlo.",
+        "discard_changes": "Descartar cambios",
+        "bottom_saved": "Guardado: sin cambios pendientes.",
+        "bottom_pending": "Cambios preparados pendientes de aplicar.",
+        "steam_command_match": "Comando actual de Steam: coincide con un perfil.",
+        "steam_command_empty": "Comando actual de Steam: sin opciones guardadas.",
+        "steam_command_manual": "Steam tiene un comando manual que no coincide con ningun perfil.",
+        "import_profile": "Importar como perfil",
+        "overwrite_profile": "Sobrescribir con perfil",
+        "view_differences": "Ver diferencias",
         "resolution_box": "Resolucion Gamescope",
         "apply_resolution": "Aplicar resolucion",
         "use_main_monitor": "Usar monitor principal",
@@ -402,7 +432,7 @@ UI_TEXT = {
         "edit_manual": "Edit manual",
         "remove_manual": "Remove manual",
         "launch": "Launch game",
-        "tabs": ["Summary", "Presets", "Options", "Advanced"],
+        "tabs": ["Summary", "Profile", "Options", "Advanced"],
         "options_box": "Launch options to apply",
         "add_option": "+ Custom option",
         "delete_option": "Trash",
@@ -423,7 +453,7 @@ UI_TEXT = {
         "proton_recommended_btn": "Recommended",
         "apply_proton": "Apply Proton",
         "no_pending": "No pending changes.",
-        "current_preset_unknown": "Current preset: not detected",
+        "current_preset_unknown": "Current profile: not detected",
         "protondb_no_data": "ProtonDB: no data",
         "system_recs": "Recommendations from your system",
         "status_system": "System",
@@ -452,12 +482,23 @@ UI_TEXT = {
         "register_appimage": "Register AppImage",
         "check_updates": "Check for updates",
         "about": "About",
-        "presets_box": "Game presets",
-        "apply_preset": "Apply preset",
-        "create_preset": "Create new preset",
-        "update_preset": "Update preset",
-        "delete_preset": "Delete preset",
-        "preset_choose": "Select a preset to load it.",
+        "presets_box": "Game profile",
+        "apply_preset": "Apply this profile",
+        "apply_current_preset": "Apply this profile",
+        "create_preset": "Create new profile",
+        "update_preset": "Update current profile",
+        "duplicate_preset": "Duplicate profile",
+        "delete_preset": "Delete profile",
+        "preset_choose": "Select a profile to load it.",
+        "discard_changes": "Discard changes",
+        "bottom_saved": "Saved: no pending changes.",
+        "bottom_pending": "Prepared changes pending apply.",
+        "steam_command_match": "Current Steam command: matches a profile.",
+        "steam_command_empty": "Current Steam command: no saved launch options.",
+        "steam_command_manual": "Steam has a manual command that does not match any profile.",
+        "import_profile": "Import as profile",
+        "overwrite_profile": "Overwrite with profile",
+        "view_differences": "View differences",
         "resolution_box": "Gamescope resolution",
         "apply_resolution": "Apply resolution",
         "use_main_monitor": "Use primary monitor",
@@ -513,6 +554,7 @@ def load_app_config():
     if not APP_CONFIG_FILE.exists():
         data = dict(DEFAULT_APP_CONFIG)
         ensure_builtin_presets(data)
+        migrate_gamescope_wsi_presets(data)
         APP_CONFIG_FILE.write_text(json.dumps(data, indent=2, sort_keys=True))
         return data
     try:
@@ -524,6 +566,7 @@ def load_app_config():
     merged = dict(DEFAULT_APP_CONFIG)
     merged.update(data)
     ensure_builtin_presets(merged)
+    migrate_gamescope_wsi_presets(merged)
     save_app_config(merged)
     return merged
 
@@ -545,7 +588,7 @@ def ensure_builtin_presets(config):
             "command": "mangohud gamemoderun %command%",
         },
         "HDR: Gamescope + GameMode": {
-            "options": ["HDR", "GAMEMODE", "MANGOHUD", "UEHDR"],
+            "options": ["HDR", "GAMESCOPEWSI", "GAMEMODE", "MANGOHUD", "UEHDR"],
             "custom_pre": "",
             "custom_post": "",
             "command": "ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f --hdr-enabled --mangoapp -- gamemoderun %command%",
@@ -557,7 +600,7 @@ def ensure_builtin_presets(config):
             "command": "PROTON_FSR4_UPGRADE=1 PROTON_ENABLE_WAYLAND=1 %command%",
         },
         "Experimental: FSR4 + Wayland + HDR": {
-            "options": ["FSR4", "WAYLAND", "PROTONHDR", "HDR", "GAMEMODE", "MANGOHUD"],
+            "options": ["FSR4", "WAYLAND", "PROTONHDR", "HDR", "GAMESCOPEWSI", "GAMEMODE", "MANGOHUD"],
             "custom_pre": "",
             "custom_post": "",
             "command": "PROTON_FSR4_UPGRADE=1 PROTON_ENABLE_WAYLAND=1 PROTON_ENABLE_HDR=1 ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f --hdr-enabled --mangoapp -- gamemoderun %command%",
@@ -589,7 +632,7 @@ def ensure_game_builtin_presets(config, appid):
             "command": "gamescope -f -w 1920 -h 1200 --framerate-limit 72 --mangoapp -- gamemoderun %command%",
         },
         "Legion Go 2 OLED HDR": {
-            "options": ["HDR", "PROTONHDR", "HANDHELD1200P", "ADAPTIVE", "GAMEMODE", "MANGOHUD"],
+            "options": ["HDR", "GAMESCOPEWSI", "PROTONHDR", "HANDHELD1200P", "ADAPTIVE", "GAMEMODE", "MANGOHUD"],
             "custom_pre": "",
             "custom_post": "",
             "command": "PROTON_ENABLE_HDR=1 ENABLE_HDR_WSI=1 ENABLE_GAMESCOPE_WSI=1 DXVK_HDR=1 gamescope -f -w 1920 -h 1200 --hdr-enabled --mangoapp --adaptive-sync -- gamemoderun %command%",
@@ -603,6 +646,21 @@ def ensure_game_builtin_presets(config, appid):
     }
     for name, payload in builtins.items():
         game_presets.setdefault(name, payload)
+
+
+def migrate_gamescope_wsi_presets(config):
+    def migrate_collection(collection):
+        for preset in collection.values():
+            options = preset.get("options")
+            if not isinstance(options, list):
+                continue
+            command = preset.get("command", "")
+            if "HDR" in options and "GAMESCOPEWSI" not in options and "ENABLE_GAMESCOPE_WSI=1" in command:
+                options.append("GAMESCOPEWSI")
+    migrate_collection(config.setdefault("shared_presets", {}))
+    for presets in config.setdefault("presets", {}).values():
+        if isinstance(presets, dict):
+            migrate_collection(presets)
 
 
 def get_shared_presets(config):
@@ -916,9 +974,7 @@ def system_recommended_keys(system):
         display = system.get("display", {})
         if int(display.get("width") or 0) and int(display.get("height") or 0):
             keys.add("REALRES")
-    if system["tools"].get("gamescope") and system.get("gamescope_wsi"):
-        keys.add("HDR")
-        keys.add("PROTONHDR")
+    keys.update(system_hdr_recommended_keys(system))
     if system["tools"].get("gamescope") and display_vrr_available(system.get("display", {})):
         keys.add("ADAPTIVE")
         if system["tools"].get("mangohud") and int(system.get("display", {}).get("refresh") or 0):
@@ -928,10 +984,25 @@ def system_recommended_keys(system):
     if system.get("device", {}).get("is_handheld"):
         keys.add("HANDHELD800P")
         keys.add("CAP60")
-    if system["gpu"] == "amd":
-        keys.add("FSR4")
     if system["gpu"] == "nvidia":
         keys.add("NVIDIA")
+    return keys
+
+
+def system_hdr_recommended_keys(system):
+    keys = set()
+    display = system.get("display", {})
+    if not display_hdr_enabled(display):
+        return keys
+    if not system["tools"].get("gamescope"):
+        return keys
+    keys.add("GAMESCOPE")
+    if int(display.get("width") or 0) and int(display.get("height") or 0):
+        keys.add("REALRES")
+    keys.add("HDR")
+    keys.add("PROTONHDR")
+    if system.get("gamescope_wsi"):
+        keys.add("GAMESCOPEWSI")
     return keys
 
 
@@ -943,11 +1014,15 @@ def recommendation_reasons(system):
         reasons.append("MangoHud disponible: util para comprobar FPS, frametime y carga.")
     if system["session"].get("type") == "wayland":
         reasons.append("Sesion Wayland detectada: Proton Wayland puede merecer prueba por juego.")
-    if system["tools"].get("gamescope") and system["gamescope_wsi"]:
-        reasons.append("Gamescope + WSI detectados: se recomiendan Gamescope, resolucion real y HDR via Gamescope para juegos compatibles.")
     display = system.get("display", {})
     if display_hdr_enabled(display):
         reasons.append("HDR del sistema activo: KDE informa HDR enabled en el monitor seleccionado.")
+        if system["tools"].get("gamescope") and system["gamescope_wsi"]:
+            reasons.append("HDR recomendado: Gamescope, resolucion real, HDR via Gamescope, Gamescope WSI y Proton HDR.")
+        elif not system["tools"].get("gamescope"):
+            reasons.append("HDR limitado: falta Gamescope, asi que no marco la ruta HDR recomendada.")
+        elif not system.get("gamescope_wsi"):
+            reasons.append("HDR parcial: falta Gamescope WSI detectado; DXVK_HDR puede no exponerse bien al juego.")
     elif display.get("hdr"):
         reasons.append(f"HDR del sistema detectado como {display.get('hdr')}: activa HDR en KDE antes de usar presets HDR.")
     if display_vrr_available(display):
@@ -965,7 +1040,7 @@ def recommendation_reasons(system):
     if system.get("device", {}).get("gaming_mode"):
         reasons.append("Gaming Mode detectado: revisa y lanza desde la app, pero aplica cambios de Steam preferiblemente en Desktop Mode.")
     if system["gpu"] == "amd":
-        reasons.append("GPU AMD detectada: FSR4 upgrade puede merecer prueba en juegos compatibles.")
+        reasons.append("GPU AMD detectada: FSR4 upgrade queda como prueba opcional, no como recomendacion HDR estable.")
     if system["gpu"] == "nvidia":
         reasons.append("GPU NVIDIA detectada: NVAPI/DLSS puede ser util en juegos compatibles.")
     return reasons
@@ -1587,6 +1662,7 @@ def detect_flags(current):
     mangohud_hidden = detect_mangohud_no_display(current)
     return {
         "HDR": "--hdr-enabled" in current or "DXVK_HDR=1" in current,
+        "GAMESCOPEWSI": "ENABLE_GAMESCOPE_WSI=1" in current,
         "WAYLAND": "PROTON_ENABLE_WAYLAND=1" in current,
         "PROTONHDR": "PROTON_ENABLE_HDR=1" in current,
         "FSR4": "PROTON_FSR4_UPGRADE=1" in current,
@@ -1611,6 +1687,7 @@ def detect_flags(current):
         "PROTONDB": False,
         "RECOMMEND": False,
         "CUSTOM": False,
+        "NOINTRO": "-nosplash" in current or "-nostartupscreen" in current,
     }
 
 
@@ -1667,7 +1744,9 @@ def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None, 
     if "FSR4IND" in selected:
         parts.append("PROTON_FSR4_INDICATOR=1")
     if "HDR" in selected:
-        parts.extend(["ENABLE_HDR_WSI=1", "ENABLE_GAMESCOPE_WSI=1", "DXVK_HDR=1"])
+        parts.extend(["ENABLE_HDR_WSI=1", "DXVK_HDR=1"])
+    if "GAMESCOPEWSI" in selected:
+        parts.append("ENABLE_GAMESCOPE_WSI=1")
     if "NODXR" in selected:
         parts.append("VKD3D_CONFIG=nodxr")
     elif "RT" in selected:
@@ -1676,6 +1755,8 @@ def compose_launch(selected, custom_pre="", custom_post="", gamescope_res=None, 
         parts.extend(["PROTON_ENABLE_NVAPI=1", "PROTON_HIDE_NVIDIA_GPU=0", "PROTON_ENABLE_NGX_UPDATER=1"])
     if "DX12" in selected:
         post_args.append("-dx12")
+    if "NOINTRO" in selected:
+        post_args.extend(["-nosplash", "-nostartupscreen"])
     for option in selected_custom:
         post_args.extend(shell_words(option.get("post", "")))
 
@@ -2361,6 +2442,23 @@ def qt_main():
                     background: #e8f5e9;
                     border: 1px solid #81c784;
                 }
+                QFrame#manualCommandWarning {
+                    background: #fff8e1;
+                    border: 1px solid #ffb300;
+                    border-radius: 8px;
+                    padding: 8px;
+                }
+                QLabel#manualCommandTitle {
+                    color: #5f4300;
+                    font-weight: 900;
+                }
+                QLabel#bottomStatus {
+                    color: #17633a;
+                    font-weight: 800;
+                }
+                QLabel#bottomStatus[dirty="true"] {
+                    color: #8a1c1c;
+                }
                 QFrame#hero {
                     background: #eef7f2;
                     border: 1px solid #b7dfc5;
@@ -2455,6 +2553,11 @@ def qt_main():
                     font-weight: 700;
                     padding: 8px 14px;
                 }
+                QPushButton#discardButton {
+                    font-weight: 800;
+                    padding: 8px 14px;
+                    background: #f2f4f7;
+                }
                 QPushButton#clearButton {
                     background: #ffe8e6;
                     color: #9f1d17;
@@ -2527,7 +2630,7 @@ def qt_main():
             self.read_only_btn = QtWidgets.QPushButton("Solo lectura")
             self.read_only_btn.setCheckable(True)
             self.read_only_btn.setChecked(bool(self.app_config.get("read_only")))
-            self.read_only_btn.setToolTip("Permite revisar juegos, presets y diagnosticos sin escribir cambios en Steam ni en presets.")
+            self.read_only_btn.setToolTip("Permite revisar juegos, perfiles y diagnosticos sin escribir cambios en Steam ni en perfiles.")
             hero_layout.addWidget(self.steam_path_btn)
             hero_layout.addWidget(self.language_btn)
             hero_layout.addWidget(self.compact_btn)
@@ -2566,9 +2669,11 @@ def qt_main():
             self.game_list.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
             self.game_list.setTextElideMode(QtCore.Qt.ElideNone)
             self.game_list.setIconSize(QtCore.QSize(28, 28))
+            config_text = self.config_text()
             for game in self.games:
                 summary = self.cached_game_summary(game["appid"])
-                item = QtWidgets.QListWidgetItem(self.game_label(game, summary))
+                command = self.launch_options_for_game(game, config_text)
+                item = QtWidgets.QListWidgetItem(self.game_label(game, summary, command))
                 item.setData(QtCore.Qt.UserRole, game)
                 icon_path = game_icon(self.root, game)
                 if icon_path:
@@ -2624,10 +2729,30 @@ def qt_main():
             self.dirty_label.setObjectName("dirtyStatus")
             self.dirty_label.setWordWrap(True)
             game_info_layout.addWidget(self.dirty_label)
-            self.current_preset_label = QtWidgets.QLabel("Preset actual: sin detectar")
+            self.current_preset_label = QtWidgets.QLabel("Perfil actual: sin detectar")
             self.current_preset_label.setObjectName("presetStatus")
             self.current_preset_label.setWordWrap(True)
             game_info_layout.addWidget(self.current_preset_label)
+            self.manual_command_warning = QtWidgets.QFrame()
+            self.manual_command_warning.setObjectName("manualCommandWarning")
+            warning_layout = QtWidgets.QVBoxLayout(self.manual_command_warning)
+            warning_layout.setContentsMargins(8, 6, 8, 6)
+            warning_layout.setSpacing(6)
+            self.manual_command_title = QtWidgets.QLabel()
+            self.manual_command_title.setObjectName("manualCommandTitle")
+            self.manual_command_title.setWordWrap(True)
+            warning_layout.addWidget(self.manual_command_title)
+            warning_buttons = QtWidgets.QHBoxLayout()
+            self.import_profile_btn = QtWidgets.QPushButton("Importar como perfil")
+            self.overwrite_profile_btn = QtWidgets.QPushButton("Sobrescribir con perfil")
+            self.view_diff_btn = QtWidgets.QPushButton("Ver diferencias")
+            warning_buttons.addWidget(self.import_profile_btn)
+            warning_buttons.addWidget(self.overwrite_profile_btn)
+            warning_buttons.addWidget(self.view_diff_btn)
+            warning_buttons.addStretch(1)
+            warning_layout.addLayout(warning_buttons)
+            self.manual_command_warning.setVisible(False)
+            game_info_layout.addWidget(self.manual_command_warning)
             right.addWidget(game_info)
             self.protondb_badge = QtWidgets.QLabel("ProtonDB: sin datos")
             self.protondb_badge.setObjectName("protondbBadge")
@@ -2649,7 +2774,7 @@ def qt_main():
                 tab_layout.setContentsMargins(6, 6, 6, 6)
                 tab_layout.setSpacing(6)
             self.tabs.addTab(overview_tab, "Resumen")
-            self.tabs.addTab(presets_tab, "Presets")
+            self.tabs.addTab(presets_tab, "Perfil")
             self.tabs.addTab(options_tab, "Opciones")
             self.tabs.addTab(advanced_tab, "Avanzado")
             right.addWidget(self.tabs, 1)
@@ -2708,7 +2833,7 @@ def qt_main():
             self.recommend_btn = QtWidgets.QPushButton("Recomendaciones")
             self.open_protondb_btn = QtWidgets.QPushButton("Abrir ProtonDB")
             self.apply_system_btn = QtWidgets.QPushButton("Marcar recomendadas")
-            self.apply_system_btn.setToolTip("Marca las opciones amarillas recomendadas segun tu sistema detectado. Para escribirlas en el juego, aplica un preset o guarda un comando.")
+            self.apply_system_btn.setToolTip("Marca las opciones amarillas recomendadas segun tu sistema detectado. Para escribirlas en el juego, aplica un perfil o guarda un comando manual.")
             self.assistant_btn = QtWidgets.QPushButton("Asistente perfil")
             self.assistant_btn.setToolTip("Marca opciones segun un objetivo: rendimiento, HDR, VRR estable, Ray Tracing o handheld.")
             self.apply_command_btn = QtWidgets.QPushButton("Aplicar cambios preparados")
@@ -2719,7 +2844,7 @@ def qt_main():
             self.history_btn = QtWidgets.QPushButton("Historial")
             self.history_btn.setToolTip("Muestra comandos anteriores guardados para este juego y permite restaurarlos.")
             self.display_diag_btn = QtWidgets.QPushButton("Diagnostico HDR/VRR")
-            self.display_diag_btn.setToolTip("Explica por que HDR, VRR o Gamescope pueden no estar funcionando.")
+            self.display_diag_btn.setToolTip("Explica el estado HDR/VRR y que opciones marcar para aplicar HDR con Gamescope/Proton.")
             self.proton_history_btn = QtWidgets.QPushButton("Historial Proton")
             self.proton_history_btn.setToolTip("Muestra cambios anteriores de version Proton por juego y permite restaurar uno.")
             self.register_appimage_btn = QtWidgets.QPushButton("Registrar AppImage")
@@ -2756,32 +2881,34 @@ def qt_main():
             overview.addWidget(self.tools_box)
             overview.addStretch(1)
 
-            self.preset_box = QtWidgets.QGroupBox("Presets del juego")
+            self.preset_box = QtWidgets.QGroupBox("Perfil del juego")
             preset_layout = QtWidgets.QVBoxLayout(self.preset_box)
             preset_layout.setContentsMargins(8, 20, 8, 8)
             preset_row = QtWidgets.QGridLayout()
             preset_row.setHorizontalSpacing(6)
             preset_row.setVerticalSpacing(6)
             self.preset_combo = NoWheelComboBox()
-            self.preset_combo.setToolTip("Selecciona un preset para cargar automaticamente sus opciones en pantalla. La rueda del raton no cambia este selector.")
+            self.preset_combo.setToolTip("Selecciona un perfil para cargar automaticamente sus opciones en pantalla. La rueda del raton no cambia este selector.")
             self.preset_combo.setMinimumContentsLength(22)
             self.preset_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
-            self.apply_preset_btn = QtWidgets.QPushButton("Aplicar preset")
-            self.apply_preset_btn.setToolTip("Guarda el preset seleccionado como opciones de lanzamiento del juego, con confirmacion.")
+            self.apply_preset_btn = QtWidgets.QPushButton("Aplicar perfil")
+            self.apply_preset_btn.setToolTip("Guarda el perfil seleccionado como opciones de lanzamiento del juego, con confirmacion.")
             self.apply_preset_btn.setEnabled(False)
-            self.save_preset_btn = QtWidgets.QPushButton("Crear nuevo preset")
-            self.save_preset_btn.setToolTip("Crea un preset compartido disponible para cualquier juego.")
-            self.update_preset_btn = QtWidgets.QPushButton("Actualizar preset")
-            self.delete_preset_btn = QtWidgets.QPushButton("Borrar preset")
-            preset_row.addWidget(self.preset_combo, 0, 0, 1, 4)
+            self.save_preset_btn = QtWidgets.QPushButton("Crear perfil nuevo")
+            self.save_preset_btn.setToolTip("Crea un perfil compartido disponible para cualquier juego.")
+            self.update_preset_btn = QtWidgets.QPushButton("Actualizar perfil")
+            self.duplicate_preset_btn = QtWidgets.QPushButton("Duplicar perfil")
+            self.delete_preset_btn = QtWidgets.QPushButton("Borrar perfil")
+            preset_row.addWidget(self.preset_combo, 0, 0, 1, 5)
             preset_row.addWidget(self.apply_preset_btn, 1, 0)
             preset_row.addWidget(self.save_preset_btn, 1, 1)
             preset_row.addWidget(self.update_preset_btn, 1, 2)
-            preset_row.addWidget(self.delete_preset_btn, 1, 3)
-            for col in range(4):
+            preset_row.addWidget(self.duplicate_preset_btn, 1, 3)
+            preset_row.addWidget(self.delete_preset_btn, 1, 4)
+            for col in range(5):
                 preset_row.setColumnStretch(col, 1)
             preset_layout.addLayout(preset_row)
-            self.preset_choice_label = QtWidgets.QLabel("Selecciona un preset para cargarlo.")
+            self.preset_choice_label = QtWidgets.QLabel("Selecciona un perfil para cargarlo.")
             self.preset_choice_label.setObjectName("presetChoiceStatus")
             self.preset_choice_label.setWordWrap(True)
             preset_layout.addWidget(self.preset_choice_label)
@@ -2885,16 +3012,29 @@ def qt_main():
 
             buttons = QtWidgets.QHBoxLayout()
             layout.addLayout(buttons)
+            self.bottom_status = QtWidgets.QLabel("Guardado: sin cambios pendientes.")
+            self.bottom_status.setObjectName("bottomStatus")
             self.save_btn = QtWidgets.QPushButton("Guardar comando manual")
             self.save_btn.setObjectName("manualButton")
-            self.save_btn.setToolTip("Pensado para cuando editas a mano el Comando final. Crea un preset custom del juego y guarda exactamente ese comando.")
+            self.save_btn.setToolTip("Pensado para cuando editas a mano el Comando final. Crea un perfil custom del juego y guarda exactamente ese comando.")
             self.clear_btn = QtWidgets.QPushButton("Borrar opciones")
             self.clear_btn.setObjectName("clearButton")
+            self.discard_btn = QtWidgets.QPushButton("Descartar cambios")
+            self.discard_btn.setObjectName("discardButton")
+            self.apply_bottom_btn = QtWidgets.QPushButton("Aplicar cambios preparados")
+            self.apply_bottom_btn.setObjectName("saveButton")
+            self.apply_current_preset_btn = QtWidgets.QPushButton("Aplicar perfil actual")
+            self.apply_current_preset_btn.setObjectName("manualButton")
+            self.apply_current_preset_btn.setVisible(False)
             self.reload_btn = QtWidgets.QPushButton("Recargar")
             buttons.addWidget(self.reload_btn)
+            buttons.addWidget(self.bottom_status, 1)
             buttons.addStretch(1)
             buttons.addWidget(self.clear_btn)
+            buttons.addWidget(self.discard_btn)
+            buttons.addWidget(self.apply_current_preset_btn)
             buttons.addWidget(self.save_btn)
+            buttons.addWidget(self.apply_bottom_btn)
 
             self.game_list.currentItemChanged.connect(self.select_game)
             self.steam_path_btn.clicked.connect(self.choose_steam_path)
@@ -2922,13 +3062,20 @@ def qt_main():
             self.apply_proton_btn.clicked.connect(self.apply_selected_proton)
             self.launch_btn.clicked.connect(self.launch_current_game)
             self.about_btn.clicked.connect(self.show_about)
+            self.import_profile_btn.clicked.connect(self.import_current_steam_command_as_profile)
+            self.overwrite_profile_btn.clicked.connect(self.overwrite_steam_with_selected_profile)
+            self.view_diff_btn.clicked.connect(self.show_compare_dialog)
             self.apply_resolution_btn.clicked.connect(self.apply_resolution_fields)
             self.detect_display_btn.clicked.connect(self.use_detected_display)
             self.preset_combo.currentIndexChanged.connect(self.on_preset_selected)
             self.apply_preset_btn.clicked.connect(self.apply_selected_preset)
             self.save_preset_btn.clicked.connect(self.save_preset)
             self.update_preset_btn.clicked.connect(self.update_preset)
+            self.duplicate_preset_btn.clicked.connect(self.duplicate_preset)
             self.delete_preset_btn.clicked.connect(self.delete_preset)
+            self.apply_current_preset_btn.clicked.connect(self.apply_selected_preset)
+            self.apply_bottom_btn.clicked.connect(self.apply_prepared_command)
+            self.discard_btn.clicked.connect(self.discard_prepared_changes)
             self.save_btn.clicked.connect(self.save)
             self.clear_btn.clicked.connect(self.clear)
             self.reload_btn.clicked.connect(self.reload)
@@ -3013,8 +3160,8 @@ def qt_main():
             ))
             self.read_only_btn.setText(self.tr("read_only"))
             self.read_only_btn.setToolTip(self.tx(
-                "Permite revisar juegos, presets y diagnosticos sin escribir cambios en Steam ni en presets.",
-                "Lets you inspect games, presets and diagnostics without writing changes to Steam or presets.",
+                "Permite revisar juegos, perfiles y diagnosticos sin escribir cambios en Steam ni en perfiles.",
+                "Lets you inspect games, profiles and diagnostics without writing changes to Steam or profiles.",
             ))
             self.games_title_label.setText(self.tr("games_installed"))
             self.add_game_btn.setText(self.tr("add_game"))
@@ -3043,6 +3190,7 @@ def qt_main():
             self.apply_preset_btn.setText(self.tr("apply_preset"))
             self.save_preset_btn.setText(self.tr("create_preset"))
             self.update_preset_btn.setText(self.tr("update_preset"))
+            self.duplicate_preset_btn.setText(self.tr("duplicate_preset"))
             self.delete_preset_btn.setText(self.tr("delete_preset"))
             self.opts_box.setTitle(self.tr("options_box"))
             self.add_option_btn.setText(self.tr("add_option"))
@@ -3060,6 +3208,9 @@ def qt_main():
             self.final_command_label.setText(self.tr("final_command"))
             self.save_btn.setText(self.tr("save_manual"))
             self.clear_btn.setText(self.tr("clear_options"))
+            self.discard_btn.setText(self.tr("discard_changes"))
+            self.apply_bottom_btn.setText(self.tr("apply_prepared"))
+            self.apply_current_preset_btn.setText(self.tr("apply_current_preset"))
             self.reload_btn.setText(self.tr("reload"))
             self.recommend_proton_btn.setText(self.tr("proton_recommended_btn"))
             self.apply_proton_btn.setText(self.tr("apply_proton"))
@@ -3076,8 +3227,8 @@ def qt_main():
                 "Saves the chosen Proton version for this game, closing Steam if needed.",
             ))
             self.apply_system_btn.setToolTip(self.tx(
-                "Marca las opciones amarillas recomendadas segun tu sistema detectado. Para escribirlas en el juego, aplica un preset o guarda un comando.",
-                "Marks the yellow options recommended for your detected system. To write them to the game, apply a preset or save a command.",
+                "Marca las opciones amarillas recomendadas segun tu sistema detectado. Para escribirlas en el juego, aplica un perfil o guarda un comando manual.",
+                "Marks the yellow options recommended for your detected system. To write them to the game, apply a profile or save a manual command.",
             ))
             self.assistant_btn.setToolTip(self.tx(
                 "Marca opciones segun un objetivo: rendimiento, HDR, VRR estable, Ray Tracing o handheld.",
@@ -3086,6 +3237,11 @@ def qt_main():
             self.apply_command_btn.setToolTip(self.tx(
                 "Escribe en Steam o en el perfil externo el comando que esta preparado ahora en pantalla.",
                 "Writes the command currently prepared on screen to Steam or the external profile.",
+            ))
+            self.apply_bottom_btn.setToolTip(self.apply_command_btn.toolTip())
+            self.discard_btn.setToolTip(self.tx(
+                "Vuelve a cargar las opciones guardadas actualmente en Steam o en el perfil externo.",
+                "Reloads the options currently saved in Steam or in the external profile.",
             ))
             self.compare_btn.setToolTip(self.tx(
                 "Compara las opciones guardadas con el comando preparado en pantalla.",
@@ -3096,8 +3252,8 @@ def qt_main():
                 "Shows previous commands saved for this game and lets you restore them.",
             ))
             self.display_diag_btn.setToolTip(self.tx(
-                "Explica por que HDR, VRR o Gamescope pueden no estar funcionando.",
-                "Explains why HDR, VRR or Gamescope may not be working.",
+                "Explica el estado HDR/VRR y que opciones marcar para aplicar HDR con Gamescope/Proton.",
+                "Explains HDR/VRR status and which options to enable for HDR with Gamescope/Proton.",
             ))
             self.proton_history_btn.setToolTip(self.tx(
                 "Muestra cambios anteriores de version Proton por juego y permite restaurar uno.",
@@ -3112,16 +3268,43 @@ def qt_main():
                 "Checks the latest GitHub release and opens the download when available.",
             ))
             self.preset_combo.setToolTip(self.tx(
-                "Selecciona un preset para cargar automaticamente sus opciones en pantalla. La rueda del raton no cambia este selector.",
-                "Select a preset to automatically load its options on screen. The mouse wheel does not change this selector.",
+                "Selecciona un perfil para cargar automaticamente sus opciones en pantalla. La rueda del raton no cambia este selector.",
+                "Select a profile to automatically load its options on screen. The mouse wheel does not change this selector.",
             ))
             self.apply_preset_btn.setToolTip(self.tx(
-                "Guarda el preset seleccionado como opciones de lanzamiento del juego, con confirmacion.",
-                "Saves the selected preset as the game's launch options, with confirmation.",
+                "Guarda el perfil seleccionado como opciones de lanzamiento del juego, con confirmacion.",
+                "Saves the selected profile as the game's launch options, with confirmation.",
+            ))
+            self.apply_current_preset_btn.setToolTip(self.tx(
+                "Aparece cuando el perfil seleccionado esta pendiente. Lo escribe en el juego con confirmacion.",
+                "Appears when the selected profile is pending. Writes it to the game with confirmation.",
             ))
             self.save_preset_btn.setToolTip(self.tx(
-                "Crea un preset compartido disponible para cualquier juego.",
-                "Creates a shared preset available to any game.",
+                "Crea un perfil compartido disponible para cualquier juego.",
+                "Creates a shared profile available to any game.",
+            ))
+            self.update_preset_btn.setToolTip(self.tx(
+                "Sobreescribe el perfil seleccionado con las opciones preparadas ahora.",
+                "Overwrites the selected profile with the options currently prepared.",
+            ))
+            self.duplicate_preset_btn.setToolTip(self.tx(
+                "Crea una copia del perfil seleccionado para modificarla sin tocar el original.",
+                "Creates a copy of the selected profile so you can edit it without changing the original.",
+            ))
+            self.delete_preset_btn.setToolTip(self.tx(
+                "Borra el perfil seleccionado tras pedir confirmacion. No borra las opciones ya escritas en Steam.",
+                "Deletes the selected profile after confirmation. It does not clear options already written to Steam.",
+            ))
+            self.import_profile_btn.setText(self.tr("import_profile"))
+            self.overwrite_profile_btn.setText(self.tr("overwrite_profile"))
+            self.view_diff_btn.setText(self.tr("view_differences"))
+            self.import_profile_btn.setToolTip(self.tx(
+                "Guarda el comando actual de Steam como un perfil del juego para poder reconocerlo y editarlo.",
+                "Saves the current Steam command as a game profile so it can be recognized and edited.",
+            ))
+            self.overwrite_profile_btn.setToolTip(self.tx(
+                "Escribe el perfil seleccionado sobre las opciones actuales de Steam.",
+                "Writes the selected profile over the current Steam options.",
             ))
             self.add_option_btn.setToolTip(self.tx(
                 "Crea una opcion manual reutilizable y la coloca en la categoria elegida.",
@@ -3157,8 +3340,8 @@ def qt_main():
                 "After %command%, e.g. -dx12 -NoLauncher",
             ))
             self.save_btn.setToolTip(self.tx(
-                "Pensado para cuando editas a mano el Comando final. Crea un preset custom del juego y guarda exactamente ese comando.",
-                "Intended for manual edits to the Final command. It creates a custom game preset and saves that exact command.",
+                "Pensado para cuando editas a mano el Comando final. Crea un perfil custom del juego y guarda exactamente ese comando.",
+                "Intended for manual edits to the Final command. It creates a custom game profile and saves that exact command.",
             ))
             self.update_system_panel_text()
             self.refresh_game_texts()
@@ -3255,16 +3438,47 @@ def qt_main():
                 self.current_label.setText(self.tr("select_game_hint"))
                 self.proton_status_label.setText(self.tr("proton_missing"))
                 self.dirty_label.setText(self.tr("no_pending"))
+                if getattr(self, "bottom_status", None):
+                    self.bottom_status.setText(self.tr("bottom_saved"))
                 self.current_preset_label.setText(self.tr("current_preset_unknown"))
                 self.protondb_badge.setText(self.tr("protondb_no_data"))
+                if getattr(self, "manual_command_warning", None):
+                    self.manual_command_warning.setVisible(False)
                 self.set_preset_choice_status(self.tr("preset_choose"), pending=False)
                 return
             source = self.tx("Externo", "External") if self.current_game.get("external") else "Steam"
+            command = self.current_game_launch_options()
+            ref, name = self.matching_preset_ref(command)
+            if not normalize_command(command):
+                state = self.tr("steam_command_empty")
+            elif ref:
+                state = f"{self.tr('steam_command_match')} {name}"
+            else:
+                state = self.tr("steam_command_manual")
             self.current_title.setText(f"{self.current_game['name']} ({self.current_game['appid']}) - {source}")
             self.current_label.setText(
+                f"{state}\n"
                 f"{self.tx('Opciones guardadas', 'Saved options')}: "
-                f"{short_command(self.current_game_launch_options(), 150 if self.app_config.get('compact_mode') else 220)}"
+                f"{short_command(command, 150 if self.app_config.get('compact_mode') else 220)}"
             )
+            self.update_manual_command_warning()
+
+        def update_manual_command_warning(self):
+            if not getattr(self, "manual_command_warning", None):
+                return
+            if not self.current_game:
+                self.manual_command_warning.setVisible(False)
+                return
+            command = self.current_game_launch_options()
+            ref, _ = self.matching_preset_ref(command)
+            manual = bool(normalize_command(command) and not ref)
+            self.manual_command_warning.setVisible(manual and not self.app_config.get("compact_mode"))
+            if manual:
+                self.manual_command_title.setText(self.tr("steam_command_manual"))
+            selected_ref = self.preset_combo.currentData() if getattr(self, "preset_combo", None) else ""
+            can_write = bool(self.current_game and not self.is_read_only())
+            self.import_profile_btn.setEnabled(can_write)
+            self.overwrite_profile_btn.setEnabled(can_write and bool(selected_ref))
 
         def choose_steam_path(self):
             path = QtWidgets.QFileDialog.getExistingDirectory(
@@ -3364,6 +3578,11 @@ def qt_main():
                     self.protondb_badge.setVisible(False)
                 elif self.current_game and not self.current_game.get("external"):
                     self.update_protondb_badge(self.cached_game_summary(self.current_game["appid"]))
+            if getattr(self, "manual_command_warning", None):
+                if compact:
+                    self.manual_command_warning.setVisible(False)
+                else:
+                    self.update_manual_command_warning()
             if getattr(self, "command_edit", None):
                 self.command_edit.setMaximumHeight(54 if compact else 78)
             if getattr(self, "tabs", None):
@@ -3376,7 +3595,7 @@ def qt_main():
                 self.update_category_headers()
                 save_app_config(self.app_config)
             if getattr(self, "current_label", None) and self.current_game:
-                self.current_label.setText(f"{self.tx('Opciones guardadas', 'Saved options')}: {short_command(self.current_game_launch_options(), 150 if compact else 220)}")
+                self.refresh_game_texts()
 
         def toggle_read_only(self, checked):
             self.app_config["read_only"] = bool(checked)
@@ -3398,12 +3617,20 @@ def qt_main():
             self.apply_proton_btn.setEnabled(bool(self.current_game and not external and not read_only))
             self.recommend_proton_btn.setEnabled(bool(self.current_game and not external and self.proton_tools))
             self.apply_command_btn.setEnabled(bool(self.current_game and not read_only))
+            self.apply_bottom_btn.setEnabled(bool(self.current_game and not read_only))
+            self.discard_btn.setEnabled(bool(self.current_game))
             self.save_btn.setEnabled(bool(self.current_game and not read_only))
             self.clear_btn.setEnabled(bool(self.current_game and not read_only))
             self.apply_system_btn.setEnabled(bool(self.current_game))
             self.save_preset_btn.setEnabled(bool(self.current_game and not read_only))
             self.update_preset_btn.setEnabled(bool(self.current_game and not read_only))
+            self.duplicate_preset_btn.setEnabled(bool(self.current_game and not read_only))
             self.delete_preset_btn.setEnabled(bool(self.current_game and not read_only))
+            if getattr(self, "import_profile_btn", None):
+                self.import_profile_btn.setEnabled(bool(self.current_game and not read_only))
+                self.overwrite_profile_btn.setEnabled(bool(self.current_game and not read_only and self.preset_combo.currentData()))
+            if read_only and getattr(self, "apply_current_preset_btn", None):
+                self.set_preset_apply_available(False)
             self.add_option_btn.setEnabled(not read_only)
             self.delete_option_btn.setEnabled(bool(self.active_custom_options() and not read_only))
             self.restore_option_btn.setEnabled(bool(self.app_config.setdefault("custom_options_trash", []) and not read_only))
@@ -3534,6 +3761,18 @@ def qt_main():
             self.dirty_label.setProperty("dirty", "true" if dirty else "false")
             self.dirty_label.style().unpolish(self.dirty_label)
             self.dirty_label.style().polish(self.dirty_label)
+            if getattr(self, "bottom_status", None):
+                self.bottom_status.setProperty("dirty", "true" if dirty else "false")
+                self.bottom_status.style().unpolish(self.bottom_status)
+                self.bottom_status.style().polish(self.bottom_status)
+                self.bottom_status.setText(self.tr("bottom_pending") if dirty else self.tr("bottom_saved"))
+            if getattr(self, "save_btn", None) and getattr(self, "command_edit", None):
+                manual = bool(self.current_game and self.command_was_edited_manually(self.prepared_command()))
+                self.save_btn.setVisible(manual)
+            if getattr(self, "game_list", None) and self.current_game:
+                item = self.game_list.currentItem()
+                if item:
+                    item.setText(self.game_label(self.current_game, self.cached_game_summary(self.current_game["appid"]), self.current_game_launch_options()))
             if dirty:
                 self.dirty_label.setText(self.tx(
                     "Cambios pendientes: el comando preparado no coincide con lo guardado para este juego.",
@@ -3615,6 +3854,15 @@ def qt_main():
                 warnings.append(self.tx("HDR esta marcado, pero el sistema no informa HDR activo.", "HDR is checked, but the system does not report active HDR."))
             if "HDR" in selected and not system.get("gamescope_wsi"):
                 warnings.append(self.tx("HDR via Gamescope necesita Gamescope WSI; no lo he detectado.", "HDR via Gamescope needs Gamescope WSI; I did not detect it."))
+            if "HDR" in selected and "GAMESCOPEWSI" not in selected:
+                warnings.append(self.tx("HDR via Gamescope suele necesitar la opcion Gamescope WSI marcada aparte.", "Gamescope HDR usually needs the separate Gamescope WSI option enabled."))
+            if "GAMESCOPEWSI" in selected and not system.get("gamescope_wsi"):
+                warnings.append(self.tx("Gamescope WSI esta marcado, pero no lo he detectado disponible en el sistema.", "Gamescope WSI is checked, but I did not detect it as available on the system."))
+            if "FSR4" in selected and ({"HDR", "GAMESCOPEWSI", "PROTONHDR"} & selected):
+                warnings.append(self.tx(
+                    "FSR4 junto a HDR/Gamescope WSI puede causar imagen lavada, oscura o color incorrecto en juegos con swapchain propia, como Dune.",
+                    "FSR4 together with HDR/Gamescope WSI can cause washed-out, dark or incorrect colors in games with their own swapchain, like Dune.",
+                ))
             if selected & {"HDR", "GAMESCOPE", "REALRES", "ADAPTIVE"} and not system["tools"].get("gamescope"):
                 warnings.append(self.tx("Hay opciones Gamescope marcadas, pero gamescope no esta disponible.", "Gamescope options are checked, but gamescope is not available."))
             if selected & {"REALRES", "CAPVRR"} and not int(res.get("width") or 0):
@@ -3646,7 +3894,48 @@ def qt_main():
             summary = item.get("summary", {})
             return summary if isinstance(summary, dict) else {}
 
-        def game_label(self, game, summary=None):
+        def launch_options_for_game(self, game, config_text=None):
+            if game.get("external"):
+                return self.app_config.setdefault("external_launch_options", {}).get(game["appid"], "")
+            text = config_text if config_text is not None else self.config_text()
+            return current_launch_options(text, game["appid"])
+
+        def preset_from_ref_for_game(self, game, ref):
+            scope, name = split_preset_ref(ref)
+            if scope == "shared":
+                return scope, name, self.shared_presets().get(name)
+            if scope == "game":
+                return scope, name, self.app_config.setdefault("presets", {}).setdefault(game["appid"], {}).get(name)
+            return "", "", None
+
+        def matching_preset_ref_for_game(self, game, command):
+            wanted = normalize_command(command)
+            if not wanted:
+                return "", ""
+            custom = self.app_config.setdefault("custom", {}).get(game["appid"], {})
+            preferred = custom.get("applied_preset_ref", "")
+            if preferred:
+                _, preferred_name, preferred_preset = self.preset_from_ref_for_game(game, preferred)
+                if preferred_preset and normalize_command(self.preset_command(preferred_preset)) == wanted:
+                    return preferred, preferred_name
+            game_presets = self.app_config.setdefault("presets", {}).setdefault(game["appid"], {})
+            for scope, presets in (("shared", self.shared_presets()), ("game", game_presets)):
+                for name, preset in presets.items():
+                    if normalize_command(self.preset_command(preset)) == wanted:
+                        return preset_ref(scope, name), name
+            return "", ""
+
+        def game_state_label(self, game, command):
+            if self.current_game and game["appid"] == self.current_game.get("appid") and self.has_pending_command_changes():
+                return self.tx("Cambios pendientes", "Pending changes")
+            if not normalize_command(command):
+                return self.tx("Sin perfil", "No profile")
+            ref, name = self.matching_preset_ref_for_game(game, command)
+            if ref:
+                return self.tx(f"Perfil: {name}", f"Profile: {name}")
+            return self.tx("Comando manual", "Manual command")
+
+        def game_label(self, game, summary=None, command=None):
             summary = summary or self.cached_game_summary(game["appid"])
             rating = protondb_tier_label(summary)
             label = f"{game['name']}  ({game['appid']})"
@@ -3654,6 +3943,12 @@ def qt_main():
                 label += f"  [{rating}]"
             if game.get("manual"):
                 label += "  - manual"
+            if command is None:
+                try:
+                    command = self.launch_options_for_game(game)
+                except Exception:
+                    command = ""
+            label += f"  - {self.game_state_label(game, command)}"
             return label
 
         def style_game_item(self, item, summary):
@@ -3673,7 +3968,7 @@ def qt_main():
             if not item:
                 return
             game = item.data(QtCore.Qt.UserRole)
-            item.setText(self.game_label(game, summary))
+            item.setText(self.game_label(game, summary, self.current_game_launch_options()))
             self.style_game_item(item, summary)
 
         def update_protondb_badge(self, summary):
@@ -3713,9 +4008,10 @@ def qt_main():
             self.game_list.blockSignals(True)
             self.game_list.clear()
             preferred_row = 0
+            config_text = self.config_text()
             for row, game in enumerate(self.games):
                 summary = self.cached_game_summary(game["appid"])
-                label = self.game_label(game, summary)
+                label = self.game_label(game, summary, self.launch_options_for_game(game, config_text))
                 item = QtWidgets.QListWidgetItem(label)
                 item.setData(QtCore.Qt.UserRole, game)
                 icon_path = game_icon(self.root, game)
@@ -3780,12 +4076,15 @@ def qt_main():
             self.refresh_presets()
             matched_ref = self.select_matching_preset(current)
             _, _, matched_preset = self.preset_from_ref(matched_ref)
-            if matched_preset and "options" not in matched_preset:
+            if matched_preset and (matched_preset.get("manual_command") or "options" not in matched_preset):
+                self.command_edit.setPlainText(current)
+            elif not matched_ref and normalize_command(current):
                 self.command_edit.setPlainText(current)
             else:
                 self.update_command()
             self.update_category_headers()
             self.update_dirty_state()
+            self.refresh_game_texts()
             self.apply_compact_mode()
 
         def add_manual_game(self):
@@ -4518,6 +4817,16 @@ def qt_main():
                     "\nDiferencia clave: Gamescope fullscreen crea el contenedor. Resolucion real Gamescope decide que resolucion/Hz se exponen dentro de ese contenedor.",
                     "\nKey difference: Gamescope fullscreen creates the container. Native Gamescope resolution decides which resolution/Hz are exposed inside it.",
                 )
+            elif key == "GAMESCOPEWSI":
+                extra = self.tx(
+                    "\nPara HDR suele ir junto a Activar HDR con Gamescope. Si tambien marcas FSR4 y el juego usa swapchain propia, puede aparecer imagen lavada, oscura o con color incorrecto.",
+                    "\nFor HDR it usually goes together with Enable HDR with Gamescope. If you also enable FSR4 and the game uses its own swapchain, the image can look washed out, dark or incorrectly colored.",
+                )
+            elif key == "FSR4":
+                extra = self.tx(
+                    "\nAviso: con HDR + Gamescope WSI puede dar problemas de color en juegos que cambian la swapchain, como hemos visto en Dune.",
+                    "\nWarning: with HDR + Gamescope WSI it can cause color issues in games that alter the swapchain, as seen with Dune.",
+                )
             elif key == "REALRES":
                 extra = self.tx(
                     "\nDiferencia clave: no sustituye a Gamescope fullscreen; le anade el modo nativo del monitor (-W/-H/-w/-h/-r).",
@@ -4606,13 +4915,15 @@ def qt_main():
                 for name in sorted(game):
                     self.preset_combo.addItem(f"{self.tx('Juego', 'Game')}: {name}", preset_ref("game", name))
             self.preset_combo.blockSignals(False)
-            self.apply_preset_btn.setEnabled(False)
+            self.set_preset_apply_available(False)
             if not shared and not game:
                 self.set_preset_choice_status(self.tx("No hay presets guardados para cargar.", "No saved presets to load."), pending=False)
 
         def preset_command(self, preset):
             if not preset:
                 return ""
+            if preset.get("manual_command") and preset.get("command"):
+                return preset.get("command", "")
             if "options" in preset:
                 return compose_launch(
                     preset.get("options", []),
@@ -4635,6 +4946,13 @@ def qt_main():
             self.preset_choice_label.style().unpolish(self.preset_choice_label)
             self.preset_choice_label.style().polish(self.preset_choice_label)
             self.preset_choice_label.setText(text)
+
+        def set_preset_apply_available(self, available):
+            available = bool(available and not self.is_read_only())
+            self.apply_preset_btn.setEnabled(available)
+            if getattr(self, "apply_current_preset_btn", None):
+                self.apply_current_preset_btn.setEnabled(available)
+                self.apply_current_preset_btn.setVisible(available)
 
         def current_applied_preset_name(self):
             if not self.current_applied_preset_ref:
@@ -4670,23 +4988,23 @@ def qt_main():
                 index = self.preset_combo.findData(ref)
                 if index >= 0:
                     self.preset_combo.setCurrentIndex(index)
-                self.set_preset_status(f"{self.tx('Preset actual aplicado', 'Current applied preset')}: {name}", pending=False)
+                self.set_preset_status(f"{self.tx('Perfil actual aplicado', 'Current applied profile')}: {name}", pending=False)
                 self.set_preset_choice_status(f"{self.tx('Seleccionado y aplicado', 'Selected and applied')}: {name}", applied=True)
             else:
                 self.preset_combo.setCurrentIndex(-1)
                 if normalize_command(command):
                     self.set_preset_status(self.tx(
-                        "Sin preset aplicado: las opciones actuales no coinciden con ningun preset guardado.",
-                        "No applied preset: current options do not match any saved preset.",
+                        "Sin perfil aplicado: las opciones actuales no coinciden con ningun perfil guardado.",
+                        "No applied profile: current options do not match any saved profile.",
                     ), pending=True)
                 else:
-                    self.set_preset_status(self.tx("Sin preset aplicado todavia.", "No preset applied yet."), pending=True)
+                    self.set_preset_status(self.tx("Sin perfil aplicado todavia.", "No profile applied yet."), pending=True)
                 self.set_preset_choice_status(self.tx(
-                    "Elige un preset para cargarlo. Al elegir uno distinto, aparecera como pendiente aqui.",
-                    "Choose a preset to load it. Choosing a different one will show it as pending here.",
+                    "Elige un perfil para cargarlo. Al elegir uno distinto, aparecera como pendiente aqui.",
+                    "Choose a profile to load it. Choosing a different one will show it as pending here.",
                 ), pending=False)
             self.preset_combo.blockSignals(False)
-            self.apply_preset_btn.setEnabled(False)
+            self.set_preset_apply_available(False)
             return ref
 
         def current_preset_payload(self):
@@ -4718,16 +5036,26 @@ def qt_main():
         def command_was_edited_manually(self, command):
             return normalize_command(command) != normalize_command(self.generated_command_from_controls())
 
-        def maybe_create_manual_command_preset(self, command):
-            if not self.current_game or not self.command_was_edited_manually(command):
-                return ""
+        def manual_command_preset_payload(self, command):
+            flags = detect_flags(command)
+            options = [key for key in OPTION_INFO if flags.get(key)]
+            return {
+                "options": options,
+                "custom_pre": "",
+                "custom_post": "",
+                "gamescope_res": detect_gamescope_resolution(command) if flags.get("REALRES") else self.gamescope_resolution(),
+                "command": command,
+                "manual_command": True,
+            }
+
+        def create_manual_command_preset(self, command):
             default_name = "Custom manual " + _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
             name, ok = QtWidgets.QInputDialog.getText(
                 self,
-                self.tx("Crear preset custom", "Create custom preset"),
+                self.tx("Crear perfil custom", "Create custom profile"),
                 self.tx(
-                    "El Comando final fue editado a mano. Nombre para guardar este preset custom:",
-                    "The Final command was edited manually. Name for this custom preset:",
+                    "El Comando final fue editado a mano. Nombre para guardar este perfil custom:",
+                    "The Final command was edited manually. Name for this custom profile:",
                 ),
                 text=default_name,
             )
@@ -4738,21 +5066,15 @@ def qt_main():
             if name in presets:
                 reply = QtWidgets.QMessageBox.question(
                     self,
-                    self.tx("Sobreescribir preset custom", "Overwrite custom preset"),
+                    self.tx("Sobreescribir perfil custom", "Overwrite custom profile"),
                     self.tx(
-                        f"Ya existe un preset del juego llamado:\n\n{name}\n\nSobreescribirlo con el comando actual?",
-                        f"A game preset already exists named:\n\n{name}\n\nOverwrite it with the current command?",
+                        f"Ya existe un perfil del juego llamado:\n\n{name}\n\nSobreescribirlo con el comando actual?",
+                        f"A game profile already exists named:\n\n{name}\n\nOverwrite it with the current command?",
                     ),
                 )
                 if reply != QtWidgets.QMessageBox.Yes:
                     return None
-            presets[name] = {
-                "custom_pre": "",
-                "custom_post": "",
-                "gamescope_res": self.gamescope_resolution(),
-                "command": command,
-                "manual_command": True,
-            }
+            presets[name] = self.manual_command_preset_payload(command)
             ref = preset_ref("game", name)
             custom = self.app_config.setdefault("custom", {}).setdefault(self.current_game["appid"], {})
             custom["applied_preset_ref"] = ref
@@ -4764,9 +5086,63 @@ def qt_main():
                 self.preset_combo.setCurrentIndex(index)
                 self.preset_combo.blockSignals(False)
             self.current_applied_preset_ref = ref
-            self.set_preset_status(f"{self.tx('Preset custom aplicado', 'Applied custom preset')}: {name}", pending=False)
+            self.set_preset_status(f"{self.tx('Perfil custom aplicado', 'Applied custom profile')}: {name}", pending=False)
             self.set_preset_choice_status(f"{self.tx('Seleccionado y aplicado', 'Selected and applied')}: {name}", applied=True)
+            self.set_preset_apply_available(False)
             return name
+
+        def update_manual_command_preset(self, ref, command):
+            scope, name, preset = self.preset_from_ref(ref)
+            if not preset:
+                return None
+            if scope == "shared":
+                self.shared_presets()[name] = self.manual_command_preset_payload(command)
+            else:
+                self.game_presets()[name] = self.manual_command_preset_payload(command)
+            custom = self.app_config.setdefault("custom", {}).setdefault(self.current_game["appid"], {})
+            custom["applied_preset_ref"] = ref
+            save_app_config(self.app_config)
+            self.refresh_presets()
+            index = self.preset_combo.findData(ref)
+            if index >= 0:
+                self.preset_combo.blockSignals(True)
+                self.preset_combo.setCurrentIndex(index)
+                self.preset_combo.blockSignals(False)
+            self.current_applied_preset_ref = ref
+            self.set_preset_status(f"{self.tx('Perfil actualizado y aplicado', 'Profile updated and applied')}: {name}", pending=False)
+            self.set_preset_choice_status(f"{self.tx('Seleccionado y aplicado', 'Selected and applied')}: {name}", applied=True)
+            self.set_preset_apply_available(False)
+            return name
+
+        def maybe_create_manual_command_preset(self, command):
+            if not self.current_game:
+                return ""
+            current_ref = self.preset_combo.currentData() or ""
+            if current_ref and not self.preset_matches_command(current_ref, command):
+                scope, name, preset = self.preset_from_ref(current_ref)
+                if preset:
+                    box = QtWidgets.QMessageBox(self)
+                    box.setWindowTitle(self.tx("Perfil distinto al comando", "Profile differs from command"))
+                    box.setText(self.tx(
+                        f"El Comando final no coincide con el perfil seleccionado:\n\n{name}\n\nQue quieres hacer?",
+                        f"The Final command does not match the selected profile:\n\n{name}\n\nWhat do you want to do?",
+                    ))
+                    box.setInformativeText(self.diagnostic_text(command))
+                    update_btn = box.addButton(self.tx("Actualizar perfil reconocido", "Update recognized profile"), QtWidgets.QMessageBox.AcceptRole)
+                    create_btn = box.addButton(self.tx("Crear perfil nuevo", "Create new profile"), QtWidgets.QMessageBox.ActionRole)
+                    cancel_btn = box.addButton(self.tx("Cancelar", "Cancel"), QtWidgets.QMessageBox.RejectRole)
+                    box.exec()
+                    clicked = box.clickedButton()
+                    if clicked == update_btn:
+                        return self.update_manual_command_preset(current_ref, command)
+                    if clicked == create_btn:
+                        return self.create_manual_command_preset(command)
+                    if clicked == cancel_btn:
+                        return None
+                    return None
+            if self.command_was_edited_manually(command):
+                return self.create_manual_command_preset(command)
+            return ""
 
         def confirm_manual_command_save(self, command, external=False):
             target = "perfil local de Proton Pilot" if external else "opciones de lanzamiento en Steam"
@@ -4776,8 +5152,8 @@ def qt_main():
                     self,
                     self.tx("Guardar comando manual", "Save manual command"),
                     self.tx(
-                        f"Guardar el Comando final editado a mano como preset custom y escribirlo en {target}?\n\n",
-                        f"Save the manually edited Final command as a custom preset and write it to {target_en}?\n\n",
+                        f"Guardar el Comando final editado a mano como perfil custom y escribirlo en {target}?\n\n",
+                        f"Save the manually edited Final command as a custom profile and write it to {target_en}?\n\n",
                     )
                     + self.diagnostic_text(command),
                 )
@@ -4787,10 +5163,10 @@ def qt_main():
                 self.tx("Comando generado por controles", "Command generated by controls"),
                 self.tx(
                     "El Comando final coincide con las casillas y campos de Proton Pilot.\n\n"
-                    "Este boton esta pensado para comandos escritos a mano. Para un perfil normal suele ser mas claro usar Crear nuevo preset, Actualizar preset o Aplicar preset.\n\n"
+                    "Este boton esta pensado para comandos escritos a mano. Para un perfil normal suele ser mas claro usar Crear perfil nuevo, Actualizar perfil actual o Aplicar este perfil.\n\n"
                     f"Guardar este comando igualmente en {target}?\n\n",
                     "The Final command matches Proton Pilot's checkboxes and fields.\n\n"
-                    "This button is intended for manually written commands. For a normal profile it is usually clearer to use Create new preset, Update preset or Apply preset.\n\n"
+                    "This button is intended for manually written commands. For a normal profile it is usually clearer to use Create new profile, Update current profile or Apply this profile.\n\n"
                     f"Save this command to {target_en} anyway?\n\n",
                 )
                 + self.diagnostic_text(command),
@@ -4800,13 +5176,13 @@ def qt_main():
         def load_selected_preset(self):
             ref = self.preset_combo.currentData()
             if not ref:
-                self.apply_preset_btn.setEnabled(False)
-                self.set_preset_choice_status(self.tx("Elige un preset para cargarlo.", "Choose a preset to load it."), pending=False)
+                self.set_preset_apply_available(False)
+                self.set_preset_choice_status(self.tx("Elige un perfil para cargarlo.", "Choose a profile to load it."), pending=False)
                 return "", ""
             scope, name, preset = self.preset_from_ref(ref)
             if not preset:
-                self.apply_preset_btn.setEnabled(False)
-                self.set_preset_choice_status(self.tx("Ese preset ya no existe.", "That preset no longer exists."), pending=True)
+                self.set_preset_apply_available(False)
+                self.set_preset_choice_status(self.tx("Ese perfil ya no existe.", "That profile no longer exists."), pending=True)
                 return "", ""
             selected = set(preset.get("options", []))
             for key, cb in self.checks.items():
@@ -4822,33 +5198,37 @@ def qt_main():
                 "refresh": int(preset_res.get("refresh") or 0) or "",
             }
             self.set_resolution_fields(preset_res)
-            if "options" in preset:
+            if preset.get("manual_command") and preset.get("command"):
+                self.command_edit.setPlainText(preset.get("command", ""))
+            elif "options" in preset:
                 self.update_command()
             else:
                 command = preset.get("command", "")
                 self.command_edit.setPlainText(command)
             if ref == self.current_applied_preset_ref:
-                self.set_preset_status(f"{self.tx('Preset actual aplicado', 'Current applied preset')}: {name}", pending=False)
+                self.set_preset_status(f"{self.tx('Perfil actual aplicado', 'Current applied profile')}: {name}", pending=False)
                 self.set_preset_choice_status(f"{self.tx('Seleccionado y aplicado', 'Selected and applied')}: {name}", applied=True)
-                self.apply_preset_btn.setEnabled(False)
+                self.set_preset_apply_available(False)
             else:
                 applied_name = self.current_applied_preset_name()
                 if applied_name:
-                    self.set_preset_status(f"{self.tx('Preset actual aplicado', 'Current applied preset')}: {applied_name}", pending=False)
+                    self.set_preset_status(f"{self.tx('Perfil actual aplicado', 'Current applied profile')}: {applied_name}", pending=False)
                 else:
                     self.set_preset_status(self.tx(
-                        "Sin preset aplicado: el preset elegido aun no se ha escrito en el juego.",
-                        "No applied preset: the selected preset has not been written to the game yet.",
+                        "Sin perfil aplicado: el perfil elegido aun no se ha escrito en el juego.",
+                        "No applied profile: the selected profile has not been written to the game yet.",
                     ), pending=True)
                 self.set_preset_choice_status(f"{self.tx('Pendiente de aplicar', 'Pending apply')}: {name}", pending=True)
-                self.apply_preset_btn.setEnabled(not self.is_read_only())
+                self.set_preset_apply_available(True)
+            self.update_manual_command_warning()
+            self.update_dirty_state()
             return ref, name
 
         def on_preset_selected(self):
             self.load_selected_preset()
 
         def apply_selected_preset(self):
-            if not self.write_guard("aplicar presets"):
+            if not self.write_guard("aplicar perfiles"):
                 return
             ref, name = self.load_selected_preset()
             if not ref or not self.current_game:
@@ -4856,8 +5236,8 @@ def qt_main():
             command = self.prepared_command()
             reply = QtWidgets.QMessageBox.question(
                 self,
-                self.tx("Aplicar preset", "Apply preset"),
-                self.tx(f"Aplicar este preset como opciones de lanzamiento?\n\n{name}\n\n", f"Apply this preset as launch options?\n\n{name}\n\n")
+                self.tx("Aplicar perfil", "Apply profile"),
+                self.tx(f"Aplicar este perfil como opciones de lanzamiento?\n\n{name}\n\n", f"Apply this profile as launch options?\n\n{name}\n\n")
                 + self.diagnostic_text(command),
             )
             if reply != QtWidgets.QMessageBox.Yes:
@@ -4870,9 +5250,9 @@ def qt_main():
         def save_preset(self):
             if not self.current_game:
                 return
-            if not self.write_guard("crear presets"):
+            if not self.write_guard("crear perfiles"):
                 return
-            name, ok = QtWidgets.QInputDialog.getText(self, self.tx("Crear nuevo preset", "Create new preset"), self.tx("Nombre del preset compartido:", "Shared preset name:"))
+            name, ok = QtWidgets.QInputDialog.getText(self, self.tx("Crear perfil nuevo", "Create new profile"), self.tx("Nombre del perfil compartido:", "Shared profile name:"))
             name = name.strip()
             if not ok or not name:
                 return
@@ -4880,10 +5260,10 @@ def qt_main():
             if name in presets:
                 reply = QtWidgets.QMessageBox.question(
                     self,
-                    self.tx("Sobreescribir preset compartido", "Overwrite shared preset"),
+                    self.tx("Sobreescribir perfil compartido", "Overwrite shared profile"),
                     self.tx(
-                        f"Ya existe un preset compartido llamado:\n\n{name}\n\nQuieres sobreescribirlo con las opciones actuales?",
-                        f"A shared preset already exists named:\n\n{name}\n\nDo you want to overwrite it with the current options?",
+                        f"Ya existe un perfil compartido llamado:\n\n{name}\n\nQuieres sobreescribirlo con las opciones actuales?",
+                        f"A shared profile already exists named:\n\n{name}\n\nDo you want to overwrite it with the current options?",
                     ),
                 )
                 if reply != QtWidgets.QMessageBox.Yes:
@@ -4891,10 +5271,10 @@ def qt_main():
             else:
                 reply = QtWidgets.QMessageBox.question(
                     self,
-                    self.tx("Crear nuevo preset", "Create new preset"),
+                    self.tx("Crear perfil nuevo", "Create new profile"),
                     self.tx(
-                        f"Crear un preset compartido llamado:\n\n{name}\n\ncon las opciones actuales?",
-                        f"Create a shared preset named:\n\n{name}\n\nwith the current options?",
+                        f"Crear un perfil compartido llamado:\n\n{name}\n\ncon las opciones actuales?",
+                        f"Create a shared profile named:\n\n{name}\n\nwith the current options?",
                     ),
                 )
                 if reply != QtWidgets.QMessageBox.Yes:
@@ -4905,12 +5285,12 @@ def qt_main():
             index = self.preset_combo.findData(preset_ref("shared", name))
             if index >= 0:
                 self.preset_combo.setCurrentIndex(index)
-            QtWidgets.QMessageBox.information(self, self.tx("Preset creado", "Preset created"), self.tx(f"Preset compartido creado:\n\n{name}", f"Shared preset created:\n\n{name}"))
+            QtWidgets.QMessageBox.information(self, self.tx("Perfil creado", "Profile created"), self.tx(f"Perfil compartido creado:\n\n{name}", f"Shared profile created:\n\n{name}"))
 
         def update_preset(self):
             if not self.current_game:
                 return
-            if not self.write_guard("actualizar presets"):
+            if not self.write_guard("actualizar perfiles"):
                 return
             ref = self.preset_combo.currentData()
             if not ref:
@@ -4920,10 +5300,10 @@ def qt_main():
                 return
             reply = QtWidgets.QMessageBox.question(
                 self,
-                self.tx("Actualizar preset", "Update preset"),
+                self.tx("Actualizar perfil", "Update profile"),
                 self.tx(
-                    f"Actualizar el preset seleccionado con las opciones actuales?\n\n{name}\n\nOrigen: {'compartido' if scope == 'shared' else 'del juego'}\n\nSe sobreescribira su contenido.",
-                    f"Update the selected preset with the current options?\n\n{name}\n\nSource: {'shared' if scope == 'shared' else 'game'}\n\nIts contents will be overwritten.",
+                    f"Actualizar el perfil seleccionado con las opciones actuales?\n\n{name}\n\nOrigen: {'compartido' if scope == 'shared' else 'del juego'}\n\nSe sobreescribira su contenido.",
+                    f"Update the selected profile with the current options?\n\n{name}\n\nSource: {'shared' if scope == 'shared' else 'game'}\n\nIts contents will be overwritten.",
                 ),
             )
             if reply != QtWidgets.QMessageBox.Yes:
@@ -4937,10 +5317,52 @@ def qt_main():
             index = self.preset_combo.findData(preset_ref(scope, name))
             if index >= 0:
                 self.preset_combo.setCurrentIndex(index)
-            QtWidgets.QMessageBox.information(self, self.tx("Preset actualizado", "Preset updated"), self.tx(f"Preset actualizado:\n\n{name}", f"Preset updated:\n\n{name}"))
+            QtWidgets.QMessageBox.information(self, self.tx("Perfil actualizado", "Profile updated"), self.tx(f"Perfil actualizado:\n\n{name}", f"Profile updated:\n\n{name}"))
+
+        def duplicate_preset(self):
+            if not self.current_game:
+                return
+            if not self.write_guard("duplicar perfiles"):
+                return
+            ref = self.preset_combo.currentData()
+            if not ref:
+                return
+            scope, name, preset = self.preset_from_ref(ref)
+            if not preset:
+                return
+            default = self.tx(f"Copia de {name}", f"Copy of {name}")
+            new_name, ok = QtWidgets.QInputDialog.getText(
+                self,
+                self.tx("Duplicar perfil", "Duplicate profile"),
+                self.tx("Nombre de la copia para este juego:", "Name for the game-specific copy:"),
+                text=default,
+            )
+            new_name = new_name.strip()
+            if not ok or not new_name:
+                return
+            presets = self.game_presets()
+            if new_name in presets:
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    self.tx("Sobreescribir copia", "Overwrite copy"),
+                    self.tx(
+                        f"Ya existe un perfil del juego llamado:\n\n{new_name}\n\nSobreescribirlo?",
+                        f"A game profile already exists named:\n\n{new_name}\n\nOverwrite it?",
+                    ),
+                )
+                if reply != QtWidgets.QMessageBox.Yes:
+                    return
+            presets[new_name] = json.loads(json.dumps(preset))
+            save_app_config(self.app_config)
+            self.refresh_presets()
+            new_ref = preset_ref("game", new_name)
+            index = self.preset_combo.findData(new_ref)
+            if index >= 0:
+                self.preset_combo.setCurrentIndex(index)
+            QtWidgets.QMessageBox.information(self, self.tx("Perfil duplicado", "Profile duplicated"), self.tx(f"Copia creada para este juego:\n\n{new_name}", f"Game-specific copy created:\n\n{new_name}"))
 
         def delete_preset(self):
-            if not self.write_guard("borrar presets"):
+            if not self.write_guard("borrar perfiles"):
                 return
             ref = self.preset_combo.currentData()
             if not ref:
@@ -4950,10 +5372,10 @@ def qt_main():
                 return
             reply = QtWidgets.QMessageBox.question(
                 self,
-                self.tx("Borrar preset", "Delete preset"),
+                self.tx("Borrar perfil", "Delete profile"),
                 self.tx(
-                    f"Borrar definitivamente este preset?\n\n{name}\n\nOrigen: {'compartido' if scope == 'shared' else 'del juego'}\n\nEsta accion no borra las opciones ya guardadas en Steam.",
-                    f"Delete this preset permanently?\n\n{name}\n\nSource: {'shared' if scope == 'shared' else 'game'}\n\nThis does not delete options already saved in Steam.",
+                    f"Borrar definitivamente este perfil?\n\n{name}\n\nOrigen: {'compartido' if scope == 'shared' else 'del juego'}\n\nEsta accion no borra las opciones ya guardadas en Steam.",
+                    f"Delete this profile permanently?\n\n{name}\n\nSource: {'shared' if scope == 'shared' else 'game'}\n\nThis does not delete options already saved in Steam.",
                 ),
             )
             if reply != QtWidgets.QMessageBox.Yes:
@@ -4964,7 +5386,73 @@ def qt_main():
                 self.game_presets().pop(name, None)
             save_app_config(self.app_config)
             self.refresh_presets()
-            QtWidgets.QMessageBox.information(self, self.tx("Preset borrado", "Preset deleted"), self.tx(f"Preset borrado:\n\n{name}", f"Preset deleted:\n\n{name}"))
+            QtWidgets.QMessageBox.information(self, self.tx("Perfil borrado", "Profile deleted"), self.tx(f"Perfil borrado:\n\n{name}", f"Profile deleted:\n\n{name}"))
+
+        def import_current_steam_command_as_profile(self):
+            if not self.current_game:
+                return
+            if not self.write_guard("importar comandos como perfiles"):
+                return
+            command = self.current_game_launch_options()
+            if not normalize_command(command):
+                QtWidgets.QMessageBox.information(
+                    self,
+                    self.tx("Sin comando para importar", "No command to import"),
+                    self.tx("Este juego no tiene opciones de lanzamiento guardadas ahora mismo.", "This game has no saved launch options right now."),
+                )
+                return
+            default_name = self.tx("Importado de Steam ", "Imported from Steam ") + _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+            name, ok = QtWidgets.QInputDialog.getText(
+                self,
+                self.tx("Importar como perfil", "Import as profile"),
+                self.tx("Nombre para el perfil del juego:", "Name for the game profile:"),
+                text=default_name,
+            )
+            name = name.strip()
+            if not ok or not name:
+                return
+            presets = self.game_presets()
+            if name in presets:
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    self.tx("Sobreescribir perfil", "Overwrite profile"),
+                    self.tx(
+                        f"Ya existe un perfil del juego llamado:\n\n{name}\n\nSobreescribirlo con el comando actual de Steam?",
+                        f"A game profile already exists named:\n\n{name}\n\nOverwrite it with the current Steam command?",
+                    ),
+                )
+                if reply != QtWidgets.QMessageBox.Yes:
+                    return
+            presets[name] = self.manual_command_preset_payload(command)
+            ref = preset_ref("game", name)
+            custom = self.app_config.setdefault("custom", {}).setdefault(self.current_game["appid"], {})
+            custom["applied_preset_ref"] = ref
+            self.current_applied_preset_ref = ref
+            save_app_config(self.app_config)
+            self.refresh_presets()
+            index = self.preset_combo.findData(ref)
+            if index >= 0:
+                self.preset_combo.setCurrentIndex(index)
+            self.load_selected_preset()
+            self.refresh_game_texts()
+            self.update_dirty_state()
+            QtWidgets.QMessageBox.information(
+                self,
+                self.tx("Perfil importado", "Profile imported"),
+                self.tx(f"El comando actual de Steam queda reconocido como perfil:\n\n{name}", f"The current Steam command is now recognized as profile:\n\n{name}"),
+            )
+
+        def overwrite_steam_with_selected_profile(self):
+            if not self.current_game:
+                return
+            if not self.preset_combo.currentData():
+                QtWidgets.QMessageBox.information(
+                    self,
+                    self.tx("Sin perfil seleccionado", "No profile selected"),
+                    self.tx("Selecciona primero un perfil en la pestana Perfil.", "Select a profile first in the Profile tab."),
+                )
+                return
+            self.apply_selected_preset()
 
         def open_protondb(self):
             if self.current_game and not self.current_game.get("external"):
@@ -5122,6 +5610,24 @@ def qt_main():
                 return
             self.save(confirm=False)
 
+        def discard_prepared_changes(self):
+            if not self.current_game:
+                return
+            if self.has_pending_command_changes():
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    self.tx("Descartar cambios", "Discard changes"),
+                    self.tx(
+                        "Descartar los cambios preparados y volver a cargar lo guardado actualmente?",
+                        "Discard prepared changes and reload what is currently saved?",
+                    ),
+                )
+                if reply != QtWidgets.QMessageBox.Yes:
+                    return
+            item = self.game_list.currentItem()
+            if item:
+                self.select_game(item)
+
         def display_diagnostic_text(self):
             display = self.system.get("display", {})
             lines = [
@@ -5136,6 +5642,7 @@ def qt_main():
                 "",
                 self.tx("Lectura practica:", "Practical read:"),
             ]
+            hdr_keys = system_hdr_recommended_keys(self.system)
             if display_hdr_enabled(display) and self.system.get("gamescope_wsi"):
                 lines.append(self.tx("- HDR via Gamescope deberia estar disponible para juegos compatibles.", "- HDR via Gamescope should be available for compatible games."))
             elif not display_hdr_enabled(display):
@@ -5148,6 +5655,35 @@ def qt_main():
                 lines.append(self.tx("- VRR no aparece disponible; Adaptive Sync puede no tener efecto.", "- VRR does not appear available; Adaptive Sync may have no effect."))
             if self.system.get("device", {}).get("gaming_mode"):
                 lines.append(self.tx("- Gaming Mode detectado: evita cambios que cierren Steam desde aqui; mejor aplicar en Desktop Mode.", "- Gaming Mode detected: avoid changes that close Steam from here; Desktop Mode is better for applying them."))
+            lines.extend(["", self.tx("Opciones HDR recomendadas para este sistema:", "HDR options recommended for this system:")])
+            if hdr_keys:
+                label_map = {
+                    "GAMESCOPE": self.tx("Usar Gamescope a pantalla completa", "Use Gamescope fullscreen"),
+                    "REALRES": self.tx("Forzar resolucion nativa en Gamescope", "Force native resolution in Gamescope"),
+                    "HDR": self.tx("Activar HDR con Gamescope", "Enable HDR with Gamescope"),
+                    "GAMESCOPEWSI": self.tx("Activar Gamescope WSI para HDR", "Enable Gamescope WSI for HDR"),
+                    "PROTONHDR": self.tx("Activar Proton HDR", "Enable Proton HDR"),
+                }
+                for key in ("GAMESCOPE", "REALRES", "HDR", "GAMESCOPEWSI", "PROTONHDR"):
+                    if key in hdr_keys:
+                        lines.append(f"- {label_map[key]}")
+                if "GAMESCOPEWSI" not in hdr_keys:
+                    lines.append(self.tx("- Gamescope WSI no se marca porque no lo he detectado disponible.", "- Gamescope WSI is not marked because I did not detect it as available."))
+            else:
+                lines.append(self.tx("- No marco un perfil HDR completo: falta HDR activo en KDE, Gamescope o soporte WSI detectable.", "- I am not marking a full HDR profile: active KDE HDR, Gamescope or detectable WSI support is missing."))
+            lines.extend(
+                [
+                    "",
+                    self.tx("Guia practica para aplicar HDR:", "Practical guide for applying HDR:"),
+                    self.tx("- Primero: HDR debe estar activo en KDE/pantalla. Si aqui sale inactivo, los flags de Proton no arreglan eso.", "- First: HDR must be active in KDE/display. If it is inactive here, Proton flags will not fix that."),
+                    self.tx("- Base recomendada: Activar HDR con Gamescope + Activar Gamescope WSI para HDR + Activar Proton HDR.", "- Recommended base: Enable HDR with Gamescope + Enable Gamescope WSI for HDR + Enable Proton HDR."),
+                    self.tx("- Activar HDR con Gamescope anade ENABLE_HDR_WSI=1, DXVK_HDR=1 y gamescope --hdr-enabled.", "- Enable HDR with Gamescope adds ENABLE_HDR_WSI=1, DXVK_HDR=1 and gamescope --hdr-enabled."),
+                    self.tx("- Gamescope WSI anade ENABLE_GAMESCOPE_WSI=1: ayuda a que el juego use la superficie HDR de Gamescope.", "- Gamescope WSI adds ENABLE_GAMESCOPE_WSI=1: it helps the game use Gamescope's HDR surface."),
+                    self.tx("- Proton HDR anade PROTON_ENABLE_HDR=1: es complementario, no sustituye a Gamescope HDR.", "- Proton HDR adds PROTON_ENABLE_HDR=1: it is complementary and does not replace Gamescope HDR."),
+                    self.tx("- Para Dune u otros juegos UE con imagen lavada: prueba HDR sin FSR4 upgrade primero.", "- For Dune or other UE games with washed-out image: test HDR without FSR4 upgrade first."),
+                    self.tx("- Forzar HDR Unreal Engine.ini solo es para juegos UE que no exponen bien HDR; no es el primer ajuste a tocar.", "- Force HDR in Unreal Engine.ini is only for UE games that do not expose HDR correctly; it is not the first setting to change."),
+                ]
+            )
             return "\n".join(lines)
 
         def show_display_diagnostics(self):
@@ -5314,7 +5850,7 @@ def qt_main():
             if goal == "performance":
                 keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "REALRES", "FSR4") if k in self.system_recommended)
             elif goal == "hdr":
-                keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "REALRES", "HDR", "PROTONHDR", "FSR4") if k in self.system_recommended)
+                keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "REALRES", "HDR", "GAMESCOPEWSI", "PROTONHDR") if k in self.system_recommended)
             elif goal == "vrr":
                 keys.update(k for k in ("GAMEMODE", "GAMESCOPE", "REALRES", "ADAPTIVE", "CAPVRR") if k in self.system_recommended)
             elif goal == "rt":
@@ -5329,13 +5865,11 @@ def qt_main():
                 if "FSR4" in self.system_recommended:
                     keys.add("FSR4")
             elif goal == "desktop_hdr_vrr":
-                keys.update(k for k in ("GAMEMODE", "MANGOHUD", "GAMESCOPE", "REALRES", "HDR", "PROTONHDR", "ADAPTIVE", "CAPVRR", "FSR4") if k in self.system_recommended)
+                keys.update(k for k in ("GAMEMODE", "MANGOHUD", "GAMESCOPE", "REALRES", "HDR", "GAMESCOPEWSI", "PROTONHDR", "ADAPTIVE", "CAPVRR") if k in self.system_recommended)
             elif goal == "legion_go_2":
                 keys.update({"GAMEMODE", "MANGOHUD", "HANDHELD1200P", "ADAPTIVE"})
                 if display_hdr_enabled(self.system.get("display", {})) and self.system.get("gamescope_wsi"):
-                    keys.update({"HDR", "PROTONHDR"})
-                if "FSR4" in self.system_recommended:
-                    keys.add("FSR4")
+                    keys.update({"HDR", "GAMESCOPEWSI", "PROTONHDR"})
             elif goal == "legion_go_s":
                 keys.update({"GAMEMODE", "MANGOHUD", "HANDHELD800P", "CAP60"})
                 if "FSR4" in self.system_recommended:
@@ -5414,13 +5948,16 @@ def qt_main():
                 self,
                 self.tx("Recomendadas marcadas", "Recommended options marked"),
                 self.tx(
-                    "He marcado las opciones amarillas recomendadas segun tu sistema detectado. Revisa el comando final y usa Crear/Actualizar preset o Aplicar preset para escribirlo.",
-                    "I marked the yellow options recommended for your detected system. Review the final command and use Create/Update preset or Apply preset to write it.",
+                    "He marcado las opciones amarillas recomendadas segun tu sistema detectado. Revisa el comando final y usa Crear/Actualizar perfil o Aplicar este perfil para escribirlo.",
+                    "I marked the yellow options recommended for your detected system. Review the final command and use Create/Update profile or Apply this profile to write it.",
                 ),
             )
 
         def show_about(self):
             history_es = [
+                ("0.11.0", "Rediseño UX por perfiles: cabecera separa comando Steam real, perfil aplicado, perfil pendiente y cambios preparados; importa comandos manuales, duplica perfiles y muestra estado por juego."),
+                ("0.10.7", "Diagnostico HDR/VRR ampliado con guia practica y recomendacion HDR segun KDE, Gamescope, WSI y monitor detectados."),
+                ("0.10.6", "Gamescope WSI separado de HDR, avisos FSR4+HDR/WSI, aplicar perfil pendiente abajo, guardado manual con actualizar/crear perfil y opcion experimental sin intro/splash."),
                 ("0.10.5", "Interfaz ampliada con traduccion ES/EN en paneles, estados, tooltips y dialogos principales."),
                 ("0.10.4", "Acordeon de opciones sin recuadros vacios, disposicion abierta persistente, selector de idioma y documentacion EN/ES."),
                 ("0.10.3", "Categorias orientadas a objetivos y titulos de opciones con verbos mas claros."),
@@ -5457,6 +5994,9 @@ def qt_main():
                 ("0.1.0", "Tool inicial con Zenity."),
             ]
             history_en = [
+                ("0.11.0", "Profile-focused UX redesign: the header separates real Steam command, applied profile, pending profile and prepared changes; imports manual commands, duplicates profiles and shows per-game status."),
+                ("0.10.7", "Expanded HDR/VRR diagnostics with a practical guide and HDR recommendations based on detected KDE, Gamescope, WSI and monitor state."),
+                ("0.10.6", "Splits Gamescope WSI from HDR, warns for FSR4+HDR/WSI, adds a bottom pending-profile apply action, manual save update/create flow and experimental skip intro/splash."),
                 ("0.10.5", "Expanded ES/EN interface coverage for panels, states, tooltips and main dialogs."),
                 ("0.10.4", "Cleaner options accordion, persistent open layout, language selector and EN/ES documentation."),
                 ("0.10.3", "Goal-oriented categories and clearer action-based option titles."),

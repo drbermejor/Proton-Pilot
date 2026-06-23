@@ -5,7 +5,7 @@ lanzamiento de Steam/Proton por juego. Ayuda a configurar Gamescope, GameMode,
 MangoHud, HDR, VRR, versiones de Proton, informacion de ProtonDB, perfiles
 handheld y opciones de lanzamiento personalizadas.
 
-Version actual: 0.10.5
+Version actual: 0.11.0
 
 ## Instalacion
 
@@ -44,6 +44,12 @@ El resultado se crea en `dist/`.
   instaladas.
 - Incluye toggles para resolucion Gamescope, HDR, VRR, limite FPS, handheld,
   RT/DXR, FSR4, Wayland, MangoHud y GameMode.
+- Separa `ENABLE_GAMESCOPE_WSI=1` como opcion propia relacionada con HDR y avisa
+  al combinar FSR4 con HDR/WSI, porque algunos juegos pueden mostrar color mal.
+- El diagnostico HDR/VRR explica que opciones marcar para HDR segun lo detectado
+  en KDE, Gamescope, Gamescope WSI y el monitor.
+- Añade una opcion experimental para saltar intro/splash con
+  `-nosplash -nostartupscreen`.
 - Agrupa las opciones en categorias orientadas a objetivos:
   - Base y rendimiento
   - Gamescope, pantalla y VRR
@@ -53,7 +59,14 @@ El resultado se crea en `dist/`.
   - Personalizadas / otros
 - Permite crear opciones de lanzamiento personalizadas, asignarlas a categorias,
   borrarlas a una papelera recuperable y restaurarlas mas adelante.
-- Guarda presets y configuracion en `~/.config/proton-pilot/config.json`.
+- Guarda perfiles y configuracion en `~/.config/proton-pilot/config.json`.
+- Rediseña el flujo por perfiles: distingue comando real de Steam, perfil
+  aplicado, perfil seleccionado pendiente y cambios preparados.
+- Detecta comandos manuales en Steam que no coinciden con ningun perfil y permite
+  importarlos como perfil, sobrescribirlos con un perfil elegido o comparar
+  diferencias.
+- Muestra el estado de cada juego en la lista: sin perfil, perfil aplicado,
+  cambios pendientes o comando manual.
 - Incluye modo compacto, modo solo lectura y preferencia persistente de idioma
   entre español e ingles.
 - La interfaz puede alternar entre español e ingles y cubre paneles, botones,
@@ -68,7 +81,7 @@ y pide aplicar los cambios desde Desktop Mode o tras cerrar Steam manualmente.
 
 ## Notas Handheld
 
-Proton Pilot incluye presets para Bazzite, sesiones tipo SteamOS y dispositivos
+Proton Pilot incluye perfiles para Bazzite, sesiones tipo SteamOS y dispositivos
 tipo Lenovo Legion Go. El soporte handheld actual esta orientado a perfiles. Una
 interfaz handheld pensada para mando queda documentada como trabajo futuro.
 

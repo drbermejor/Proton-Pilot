@@ -13,7 +13,7 @@ SPEC.loader.exec_module(proton_pilot)
 class ProtonPilotLogicTests(unittest.TestCase):
     def test_compose_does_not_add_mangohud_when_unselected(self):
         command = proton_pilot.compose_launch(
-            ["GAMEMODE", "HDR", "WAYLAND", "PROTONHDR", "FSR4", "GAMESCOPE", "REALRES", "ADAPTIVE", "UEHDR"],
+            ["GAMEMODE", "HDR", "GAMESCOPEWSI", "WAYLAND", "PROTONHDR", "FSR4", "GAMESCOPE", "REALRES", "ADAPTIVE", "UEHDR"],
             "",
             "",
             {"width": 2560, "height": 1440, "refresh": 180},
@@ -80,8 +80,24 @@ class ProtonPilotLogicTests(unittest.TestCase):
         flags = proton_pilot.detect_flags(command)
 
         self.assertTrue(flags["HDR"])
+        self.assertTrue(flags["GAMESCOPEWSI"])
         self.assertFalse(flags["MANGOHUD"])
         self.assertFalse(flags["GAMEMODE"])
+
+    def test_hdr_and_gamescope_wsi_are_separate_options(self):
+        hdr_command = proton_pilot.compose_launch(["HDR"], "", "", {})
+        wsi_command = proton_pilot.compose_launch(["GAMESCOPEWSI"], "", "", {})
+
+        self.assertIn("ENABLE_HDR_WSI=1", hdr_command)
+        self.assertIn("DXVK_HDR=1", hdr_command)
+        self.assertNotIn("ENABLE_GAMESCOPE_WSI=1", hdr_command)
+        self.assertEqual(wsi_command, "ENABLE_GAMESCOPE_WSI=1 %command%")
+
+    def test_no_intro_option_adds_post_arguments(self):
+        command = proton_pilot.compose_launch(["NOINTRO"], "", "", {})
+
+        self.assertEqual(command, "%command% -nosplash -nostartupscreen")
+        self.assertTrue(proton_pilot.detect_flags(command)["NOINTRO"])
 
     def test_vrr_cap_uses_refresh_minus_margin(self):
         command = proton_pilot.compose_launch(
@@ -215,6 +231,7 @@ class ProtonPilotLogicTests(unittest.TestCase):
         keys = proton_pilot.system_recommended_keys(system)
 
         self.assertIn("HDR", keys)
+        self.assertIn("GAMESCOPEWSI", keys)
         self.assertIn("PROTONHDR", keys)
         self.assertIn("ADAPTIVE", keys)
         self.assertIn("CAPVRR", keys)
