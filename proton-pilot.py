@@ -342,6 +342,7 @@ UI_TEXT = {
         "remove_manual": "Quitar manual",
         "launch": "Iniciar juego",
         "save_files": "Archivos guardados",
+        "hung_processes": "Procesos colgados",
         "tabs": ["Resumen", "Perfil", "Opciones", "Avanzado"],
         "options_box": "Opciones que se aplicaran al lanzamiento",
         "add_option": "+ Opcion manual",
@@ -360,6 +361,7 @@ UI_TEXT = {
         "select_game_hint": "Selecciona un juego para ver sus opciones.",
         "launch_tip": "Inicia el juego seleccionado. Steam usara las opciones que ya esten guardadas.",
         "save_files_tip": "Busca y abre las carpetas de guardado del juego seleccionado, incluidos Steam Cloud y el prefijo Proton.",
+        "hung_processes_tip": "Abre el selector para identificar y cerrar Gamescope u otros procesos que no responden.",
         "proton_missing": "Proton: sin detectar",
         "proton_recommended_btn": "Recomendada",
         "apply_proton": "Aplicar Proton",
@@ -436,6 +438,7 @@ UI_TEXT = {
         "remove_manual": "Remove manual",
         "launch": "Launch game",
         "save_files": "Save files",
+        "hung_processes": "Hung processes",
         "tabs": ["Summary", "Profile", "Options", "Advanced"],
         "options_box": "Launch options to apply",
         "add_option": "+ Custom option",
@@ -454,6 +457,7 @@ UI_TEXT = {
         "select_game_hint": "Select a game to see its options.",
         "launch_tip": "Launches the selected game. Steam will use the options already saved.",
         "save_files_tip": "Finds and opens save folders for the selected game, including Steam Cloud and the Proton prefix.",
+        "hung_processes_tip": "Opens the selector for identifying and closing Gamescope or other unresponsive processes.",
         "proton_missing": "Proton: not detected",
         "proton_recommended_btn": "Recommended",
         "apply_proton": "Apply Proton",
@@ -3054,6 +3058,10 @@ def qt_main():
             self.save_files_btn.setToolTip(
                 "Busca y abre las carpetas de guardado del juego seleccionado."
             )
+            self.process_selector_btn = QtWidgets.QPushButton("Procesos colgados")
+            self.process_selector_btn.setToolTip(
+                "Identifica y cierra Gamescope u otros procesos que no responden."
+            )
             self.apply_system_btn = QtWidgets.QPushButton("Marcar recomendadas")
             self.apply_system_btn.setToolTip("Marca las opciones amarillas recomendadas segun tu sistema detectado. Para escribirlas en el juego, aplica un perfil o guarda un comando manual.")
             self.assistant_btn = QtWidgets.QPushButton("Asistente perfil")
@@ -3089,6 +3097,7 @@ def qt_main():
                 [
                     self.open_protondb_btn,
                     self.save_files_btn,
+                    self.process_selector_btn,
                     self.compare_btn,
                     self.history_btn,
                     self.display_diag_btn,
@@ -3270,6 +3279,7 @@ def qt_main():
             self.recommend_btn.clicked.connect(self.show_recommendations)
             self.open_protondb_btn.clicked.connect(self.open_protondb)
             self.save_files_btn.clicked.connect(self.open_save_files)
+            self.process_selector_btn.clicked.connect(self.open_process_selector)
             self.apply_system_btn.clicked.connect(self.apply_system_recommended)
             self.apply_command_btn.clicked.connect(self.apply_prepared_command)
             self.add_option_btn.clicked.connect(self.add_custom_option)
@@ -3395,6 +3405,8 @@ def qt_main():
             self.launch_btn.setToolTip(self.tr("launch_tip"))
             self.save_files_btn.setText(self.tr("save_files"))
             self.save_files_btn.setToolTip(self.tr("save_files_tip"))
+            self.process_selector_btn.setText(self.tr("hung_processes"))
+            self.process_selector_btn.setToolTip(self.tr("hung_processes_tip"))
             for index, label in enumerate(self.tr("tabs")):
                 self.tabs.setTabText(index, label)
             self.sys_box.setTitle(self.tr("system_recs"))
@@ -5705,27 +5717,93 @@ def qt_main():
                 )
                 return
 
-            labels = [f"{label}\n{path}" for label, path in locations]
             if len(locations) == 1:
                 selected_index = 0
             else:
-                selected, accepted = QtWidgets.QInputDialog.getItem(
-                    self,
-                    self.tx(
-                        "Archivos guardados",
-                        "Save files",
-                    ),
+                dialog = QtWidgets.QDialog(self)
+                dialog.setWindowTitle(self.tx("Archivos guardados", "Save files"))
+                dialog.resize(980, 440)
+                layout = QtWidgets.QVBoxLayout(dialog)
+                hint = QtWidgets.QLabel(
                     self.tx(
                         "Selecciona la carpeta que quieres abrir:",
                         "Select the folder to open:",
-                    ),
-                    labels,
-                    0,
-                    False,
+                    )
                 )
-                if not accepted:
+                layout.addWidget(hint)
+
+                table = QtWidgets.QTreeWidget()
+                table.setColumnCount(2)
+                table.setHeaderLabels(
+                    [
+                        self.tx("Tipo", "Type"),
+                        self.tx("Ruta completa", "Full path"),
+                    ]
+                )
+                table.setRootIsDecorated(False)
+                table.setAlternatingRowColors(True)
+                table.setSelectionMode(
+                    QtWidgets.QAbstractItemView.SingleSelection
+                )
+                table.setHorizontalScrollBarPolicy(
+                    QtCore.Qt.ScrollBarAsNeeded
+                )
+                for index, (label, path) in enumerate(locations):
+                    item = QtWidgets.QTreeWidgetItem([label, str(path)])
+                    item.setData(0, QtCore.Qt.UserRole, index)
+                    item.setToolTip(1, str(path))
+                    table.addTopLevelItem(item)
+                table.header().setSectionResizeMode(
+                    0, QtWidgets.QHeaderView.ResizeToContents
+                )
+                table.header().setSectionResizeMode(
+                    1, QtWidgets.QHeaderView.Stretch
+                )
+                layout.addWidget(table, 1)
+
+                path_preview = QtWidgets.QLabel()
+                path_preview.setWordWrap(True)
+                path_preview.setTextInteractionFlags(
+                    QtCore.Qt.TextSelectableByMouse
+                )
+                path_preview.setMinimumHeight(48)
+                path_preview.setStyleSheet(
+                    "background: #f7f8fa; border: 1px solid #c9cdd2; "
+                    "border-radius: 6px; padding: 7px;"
+                )
+                layout.addWidget(path_preview)
+
+                buttons = QtWidgets.QDialogButtonBox(
+                    QtWidgets.QDialogButtonBox.Open
+                    | QtWidgets.QDialogButtonBox.Cancel
+                )
+                buttons.button(QtWidgets.QDialogButtonBox.Open).setText(
+                    self.tx("Abrir carpeta", "Open folder")
+                )
+                buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText(
+                    self.tx("Cancelar", "Cancel")
+                )
+                layout.addWidget(buttons)
+
+                def update_path_preview(current, _previous=None):
+                    path_preview.setText(current.text(1) if current else "")
+
+                table.currentItemChanged.connect(update_path_preview)
+                table.itemDoubleClicked.connect(
+                    lambda _item, _column: dialog.accept()
+                )
+                buttons.accepted.connect(dialog.accept)
+                buttons.rejected.connect(dialog.reject)
+                table.setCurrentItem(table.topLevelItem(0))
+
+                if dialog.exec() != QtWidgets.QDialog.Accepted:
                     return
-                selected_index = labels.index(selected)
+                selected_item = table.currentItem()
+                if not selected_item:
+                    return
+                selected_index = int(
+                    selected_item.data(0, QtCore.Qt.UserRole)
+                )
 
             path = locations[selected_index][1]
             opened = QtGui.QDesktopServices.openUrl(
@@ -5739,6 +5817,45 @@ def qt_main():
                         f"No se pudo abrir esta carpeta:\n\n{path}",
                         f"Could not open this folder:\n\n{path}",
                     ),
+                )
+
+        def open_process_selector(self):
+            candidates = [
+                APP_DIR / "tools/hung-process-selector.py",
+            ]
+            installed_command = shutil.which("proton-pilot-process-selector")
+            if installed_command:
+                candidates.append(Path(installed_command))
+            selector = first_existing(candidates)
+            if not selector:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    self.tx(
+                        "Selector no instalado",
+                        "Selector not installed",
+                    ),
+                    self.tx(
+                        "No encuentro la herramienta de procesos colgados. "
+                        "Vuelve a ejecutar install.sh para instalarla.",
+                        "The hung-process selector was not found. Run install.sh "
+                        "again to install it.",
+                    ),
+                )
+                return
+            try:
+                subprocess.Popen(
+                    [sys.executable, str(selector)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except OSError as error:
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    self.tx(
+                        "No se pudo abrir el selector",
+                        "Could not open selector",
+                    ),
+                    str(error),
                 )
 
         def external_base_command(self):

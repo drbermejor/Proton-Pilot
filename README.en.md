@@ -44,7 +44,7 @@ The output is created in `dist/`.
   common native Linux locations, then opens the selected folder.
 - Includes a standalone hung-process selector that highlights Linux/KWin
   unresponsive states, preselects Gamescope, and can terminate its descendant
-  process tree.
+  process tree. It opens from `Tools and diagnostics` in Proton Pilot.
 - Provides system recommendations based on GPU, display, session, and tools.
 - Provides Gamescope resolution forcing, HDR, VRR, FPS cap, handheld, RT/DXR,
   FSR4, Wayland, MangoHud, and GameMode toggles.

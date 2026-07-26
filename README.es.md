@@ -45,7 +45,8 @@ El resultado se crea en `dist/`.
   Proton y carpetas Linux habituales, y abre la carpeta elegida.
 - Incluye un selector independiente de procesos colgados que resalta bloqueos
   detectados por Linux o KWin, preselecciona Gamescope y puede cerrar todo su
-  arbol de procesos hijo.
+  arbol de procesos hijo. Se abre desde `Herramientas y diagnostico` dentro de
+  Proton Pilot.
 - Propone recomendaciones segun GPU, pantalla, sesion grafica y herramientas
   instaladas.
 - Incluye toggles para resolucion Gamescope, HDR, VRR, limite FPS, handheld,

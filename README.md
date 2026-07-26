@@ -93,7 +93,8 @@ tocar `localconfig.vdf`.
   folder in the file manager.
 - Includes a standalone hung-process selector that highlights Linux blocked
   states and KWin unresponsive windows, preselects Gamescope, and can terminate
-  the full descendant process tree.
+  the full descendant process tree. It can be opened directly from
+  `Tools and diagnostics`.
 - Can apply Unreal Engine HDR config tweaks for games that need them.
 - Can register the generated AppImage as a Steam non-Steam shortcut.
 - Can check the latest GitHub release and open the AppImage download page.
@@ -455,6 +456,8 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
   groups to reduce visual noise.
 - `Save files` searches Steam Cloud, the selected game's Proton prefix, and
   common Linux data/config locations, then lets you choose a folder to open.
+- `Hung processes` opens the companion Gamescope/process selector without
+  leaving Proton Pilot.
 - The selected-game panel also warns when the command prepared on screen differs
   from the command already saved for that game.
 - `Compare` shows saved launch options next to the prepared command.
