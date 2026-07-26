@@ -36,6 +36,10 @@ Puedes crear un AppImage con:
 
 El resultado se crea en `dist/`.
 
+El AppImage incluye el selector de procesos, pero esta utilidad complementaria
+usa el `python3` y Tkinter del sistema. La deteccion mejorada de KWin tambien
+utiliza D-Bus y PyGObject del sistema cuando estan disponibles.
+
 ## Funciones Principales
 
 - Detecta juegos instalados de Steam y juegos añadidos manualmente.

@@ -10,15 +10,16 @@ APPDIR="$BUILD_DIR/ProtonPilot.AppDir"
 OUT_DIR="$ROOT_DIR/dist"
 APPIMAGETOOL="$BUILD_DIR/appimagetool-x86_64.AppImage"
 
-mkdir -p "$APPDIR/usr/share/$APP_ID" "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$OUT_DIR"
+mkdir -p "$APPDIR/usr/share/$APP_ID" "$APPDIR/usr/share/$APP_ID/tools" "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$OUT_DIR"
 rm -rf "$APPDIR/usr/share/$APP_ID" "$APPDIR/usr/venv"
-mkdir -p "$APPDIR/usr/share/$APP_ID" "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "$APPDIR/usr/share/$APP_ID" "$APPDIR/usr/share/$APP_ID/tools" "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 
 python3 -m venv --copies "$APPDIR/usr/venv"
 "$APPDIR/usr/venv/bin/python" -m pip install --upgrade pip
 "$APPDIR/usr/venv/bin/python" -m pip install PySide6 vdf
 
 install -m 755 "$ROOT_DIR/proton-pilot.py" "$APPDIR/usr/share/$APP_ID/proton-pilot.py"
+install -m 755 "$ROOT_DIR/tools/hung-process-selector.py" "$APPDIR/usr/share/$APP_ID/tools/hung-process-selector.py"
 install -m 644 "$ROOT_DIR/README.md" "$APPDIR/usr/share/$APP_ID/README.md"
 mkdir -p "$APPDIR/usr/share/$APP_ID/assets"
 install -m 644 "$ROOT_DIR/assets/proton-pilot.png" "$APPDIR/usr/share/$APP_ID/assets/proton-pilot.png"

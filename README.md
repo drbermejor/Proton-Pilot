@@ -169,6 +169,10 @@ and `vdf`. System integrations are still expected from the host: Steam,
 Gamescope, GameMode, MangoHud, `icoutils`, and GPU/display drivers are not
 bundled because they must match the local Linux gaming stack.
 
+The AppImage includes the hung-process selector source, but that companion tool
+uses the system `python3` and needs system Tkinter. KWin-enhanced detection also
+uses the optional system D-Bus/PyGObject integration described below.
+
 Most desktops need FUSE support to run AppImages directly. On Arch/CachyOS this
 is usually:
 
@@ -674,4 +678,8 @@ different `.exe`, use a game-specific/manual command instead.
 - 0.11.0: Redesigns the UX around profiles, separates real Steam command,
   applied profile, selected pending profile and prepared changes, adds manual
   Steam-command import, profile duplication, discard changes, and per-game
-  state labels.
+  state labels. Adds save-file discovery across Steam Cloud, Proton prefixes,
+  native Linux locations and internal game names, plus a full-path chooser.
+  Adds a bundled Gamescope/hung-process selector with Linux/KWin detection,
+  protected desktop processes, descendant-tree termination, and direct access
+  from Proton Pilot.

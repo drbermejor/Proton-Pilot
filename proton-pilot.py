@@ -5843,8 +5843,15 @@ def qt_main():
                 )
                 return
             try:
+                interpreter = (
+                    shutil.which("python3")
+                    if os.environ.get("APPIMAGE")
+                    else sys.executable
+                )
+                if not interpreter:
+                    raise OSError("python3 is not available")
                 subprocess.Popen(
-                    [sys.executable, str(selector)],
+                    [interpreter, str(selector)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )

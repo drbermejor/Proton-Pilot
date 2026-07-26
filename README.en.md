@@ -35,6 +35,10 @@ Build an AppImage with:
 
 The output is created in `dist/`.
 
+The AppImage bundles the process-selector source, but this companion uses the
+system `python3` and Tkinter. Enhanced KWin detection also uses system D-Bus and
+PyGObject when available.
+
 ## Main Features
 
 - Detects installed Steam games and manually added games.
