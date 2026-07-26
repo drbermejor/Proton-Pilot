@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Proton Pilot - Cerrar procesos colgados
+Comment=Seleccionar y terminar procesos que no responden
+Name[en]=Proton Pilot - Hung Process Selector
+Comment[en]=Select and terminate unresponsive processes
+Exec=proton-pilot-process-selector
+Icon=process-stop
+Terminal=false
+Categories=System;
+StartupNotify=true

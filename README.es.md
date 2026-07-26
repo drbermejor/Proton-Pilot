@@ -23,6 +23,7 @@ El comando instalado es:
 
 ```bash
 proton-pilot
+proton-pilot-process-selector
 ```
 
 ## AppImage
@@ -40,6 +41,11 @@ El resultado se crea en `dist/`.
 - Detecta juegos instalados de Steam y juegos añadidos manualmente.
 - Lee y escribe opciones de lanzamiento de Steam por juego.
 - Muestra y cambia la version de Proton/compatibility tool usada por cada juego.
+- El boton `Archivos guardados` busca ubicaciones de Steam Cloud, el prefijo
+  Proton y carpetas Linux habituales, y abre la carpeta elegida.
+- Incluye un selector independiente de procesos colgados que resalta bloqueos
+  detectados por Linux o KWin, preselecciona Gamescope y puede cerrar todo su
+  arbol de procesos hijo.
 - Propone recomendaciones segun GPU, pantalla, sesion grafica y herramientas
   instaladas.
 - Incluye toggles para resolucion Gamescope, HDR, VRR, limite FPS, handheld,

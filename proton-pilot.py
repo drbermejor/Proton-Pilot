@@ -8,6 +8,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import unicodedata
 import urllib.error
 import urllib.request
 import zlib
@@ -340,6 +341,7 @@ UI_TEXT = {
         "edit_manual": "Editar manual",
         "remove_manual": "Quitar manual",
         "launch": "Iniciar juego",
+        "save_files": "Archivos guardados",
         "tabs": ["Resumen", "Perfil", "Opciones", "Avanzado"],
         "options_box": "Opciones que se aplicaran al lanzamiento",
         "add_option": "+ Opcion manual",
@@ -357,6 +359,7 @@ UI_TEXT = {
         "select_game": "Selecciona un juego",
         "select_game_hint": "Selecciona un juego para ver sus opciones.",
         "launch_tip": "Inicia el juego seleccionado. Steam usara las opciones que ya esten guardadas.",
+        "save_files_tip": "Busca y abre las carpetas de guardado del juego seleccionado, incluidos Steam Cloud y el prefijo Proton.",
         "proton_missing": "Proton: sin detectar",
         "proton_recommended_btn": "Recomendada",
         "apply_proton": "Aplicar Proton",
@@ -432,6 +435,7 @@ UI_TEXT = {
         "edit_manual": "Edit manual",
         "remove_manual": "Remove manual",
         "launch": "Launch game",
+        "save_files": "Save files",
         "tabs": ["Summary", "Profile", "Options", "Advanced"],
         "options_box": "Launch options to apply",
         "add_option": "+ Custom option",
@@ -449,6 +453,7 @@ UI_TEXT = {
         "select_game": "Select a game",
         "select_game_hint": "Select a game to see its options.",
         "launch_tip": "Launches the selected game. Steam will use the options already saved.",
+        "save_files_tip": "Finds and opens save folders for the selected game, including Steam Cloud and the Proton prefix.",
         "proton_missing": "Proton: not detected",
         "proton_recommended_btn": "Recommended",
         "apply_proton": "Apply Proton",
@@ -1181,6 +1186,219 @@ def merged_games(root, config):
             }
         )
     return sorted(games, key=lambda g: g["name"].casefold())
+
+
+def _save_name_terms(name):
+    normalized = unicodedata.normalize("NFKD", str(name))
+    normalized = "".join(char for char in normalized if not unicodedata.combining(char))
+    words = re.findall(r"[a-z0-9]+", normalized.casefold())
+    ignored = {
+        "and",
+        "deluxe",
+        "edition",
+        "game",
+        "goty",
+        "of",
+        "remastered",
+        "the",
+    }
+    terms = {word for word in words if len(word) >= 3 and word not in ignored}
+    joined = "".join(words)
+    if len(joined) >= 5:
+        terms.add(joined)
+    return terms
+
+
+def _matching_save_directories(base, game_name, max_entries=800):
+    base = Path(base)
+    if not base.is_dir():
+        return []
+    terms = _save_name_terms(game_name)
+    if not terms:
+        return []
+    matches = []
+    checked = 0
+    try:
+        first_level = sorted(
+            (path for path in base.iterdir() if path.is_dir()),
+            key=lambda path: path.name.casefold(),
+        )
+    except OSError:
+        return []
+    for parent in first_level:
+        candidates = [parent]
+        try:
+            candidates.extend(path for path in parent.iterdir() if path.is_dir())
+        except OSError:
+            pass
+        for candidate in candidates:
+            checked += 1
+            candidate_name = re.sub(
+                r"[^a-z0-9]+",
+                "",
+                unicodedata.normalize("NFKD", candidate.name)
+                .encode("ascii", "ignore")
+                .decode()
+                .casefold(),
+            )
+            if candidate_name and any(term in candidate_name for term in terms):
+                matches.append(candidate)
+            if checked >= max_entries:
+                return matches
+    return matches
+
+
+def _signature_save_directories(base, max_entries=2500, max_depth=5):
+    base = Path(base)
+    if not base.is_dir():
+        return []
+    save_dir_names = {
+        "save",
+        "saved",
+        "savegame",
+        "savegames",
+        "savedgame",
+        "savedgames",
+        "saves",
+    }
+    save_suffixes = {
+        ".ess",
+        ".fos",
+        ".sav",
+        ".save",
+        ".savegame",
+        ".sl2",
+    }
+    ignored_dirs = {
+        "cache",
+        "crash",
+        "crashes",
+        "logs",
+        "shadercache",
+        "temp",
+        "tmp",
+    }
+    matches = []
+    checked = 0
+    try:
+        walker = os.walk(base)
+        for current, directories, files in walker:
+            current_path = Path(current)
+            depth = len(current_path.relative_to(base).parts)
+            directories[:] = [
+                name
+                for name in directories
+                if name.casefold() not in ignored_dirs and depth < max_depth
+            ]
+            checked += len(directories) + len(files)
+            normalized_name = re.sub(
+                r"[^a-z0-9]+", "", current_path.name.casefold()
+            )
+            has_save_files = any(
+                Path(filename).suffix.casefold() in save_suffixes
+                for filename in files
+            )
+            relative_parts = {
+                part.casefold() for part in current_path.relative_to(base).parts
+            }
+            named_save_dir = (
+                normalized_name in save_dir_names
+                and bool(files or directories)
+                and "unrealengine" not in relative_parts
+            )
+            if named_save_dir or has_save_files:
+                matches.append(current_path)
+            if checked >= max_entries:
+                break
+    except OSError:
+        return matches
+    # Prefer the most specific directories and avoid returning their parents too.
+    specific = []
+    for candidate in sorted(matches, key=lambda path: len(path.parts), reverse=True):
+        if not any(candidate in existing.parents for existing in specific):
+            specific.append(candidate)
+    return specific
+
+
+def save_location_candidates(root, game):
+    """Return existing, likely save locations for a Steam or external game."""
+    root = Path(root)
+    appid = str(game.get("appid", "")).strip()
+    game_name = str(game.get("name", "")).strip()
+    results = []
+    seen = set()
+
+    def add(label, path):
+        path = Path(path).expanduser()
+        if not path.is_dir():
+            return
+        key = str(path.resolve())
+        if key in seen:
+            return
+        seen.add(key)
+        results.append((label, path))
+
+    # Steam Cloud keeps synced files here, independently of the game library.
+    if appid:
+        userdata = root / "userdata"
+        if userdata.is_dir():
+            try:
+                user_dirs = list(userdata.iterdir())
+            except OSError:
+                user_dirs = []
+            for user_dir in user_dirs:
+                add("Steam Cloud", user_dir / appid / "remote")
+
+    prefix_roots = []
+    if game.get("external"):
+        compatdata = Path(
+            game.get("prefix") or APP_CONFIG_DIR / "compatdata" / appid
+        ).expanduser()
+        if (compatdata / "pfx/drive_c").is_dir():
+            prefix_roots.append(compatdata / "pfx")
+        elif (compatdata / "drive_c").is_dir():
+            prefix_roots.append(compatdata)
+    elif appid:
+        libraries = []
+        game_library = game.get("library")
+        if game_library:
+            libraries.append(Path(game_library))
+        libraries.extend(path for path in library_paths(root) if path not in libraries)
+        for library in libraries:
+            prefix = library / "steamapps/compatdata" / appid / "pfx"
+            if prefix.is_dir() and prefix not in prefix_roots:
+                prefix_roots.append(prefix)
+
+    relative_containers = [
+        ("Documentos / My Games", "drive_c/users/steamuser/Documents/My Games"),
+        ("Documentos", "drive_c/users/steamuser/Documents"),
+        ("Juegos guardados", "drive_c/users/steamuser/Saved Games"),
+        ("AppData Local", "drive_c/users/steamuser/AppData/Local"),
+        ("AppData LocalLow", "drive_c/users/steamuser/AppData/LocalLow"),
+        ("AppData Roaming", "drive_c/users/steamuser/AppData/Roaming"),
+    ]
+    for prefix in prefix_roots:
+        for label, relative in relative_containers:
+            container = prefix / relative
+            for match in _signature_save_directories(container):
+                add(f"Guardado detectado · {match.name}", match)
+            for match in _matching_save_directories(container, game_name):
+                add(f"{label} · {match.name}", match)
+        for label, relative in relative_containers:
+            add(label, prefix / relative)
+        add("Prefijo Proton completo", prefix)
+
+    # Native Linux games commonly use a title-named directory in these roots.
+    native_roots = [
+        ("Datos Linux", HOME / ".local/share"),
+        ("Configuración Linux", HOME / ".config"),
+        ("Documentos / My Games", HOME / "Documents/My Games"),
+    ]
+    for label, base in native_roots:
+        for match in _matching_save_directories(base, game_name):
+            add(f"{label} · {match.name}", match)
+
+    return results
 
 
 def find_game_icon(root, appid):
@@ -2832,6 +3050,10 @@ def qt_main():
             action_layout.setVerticalSpacing(6)
             self.recommend_btn = QtWidgets.QPushButton("Recomendaciones")
             self.open_protondb_btn = QtWidgets.QPushButton("Abrir ProtonDB")
+            self.save_files_btn = QtWidgets.QPushButton("Archivos guardados")
+            self.save_files_btn.setToolTip(
+                "Busca y abre las carpetas de guardado del juego seleccionado."
+            )
             self.apply_system_btn = QtWidgets.QPushButton("Marcar recomendadas")
             self.apply_system_btn.setToolTip("Marca las opciones amarillas recomendadas segun tu sistema detectado. Para escribirlas en el juego, aplica un perfil o guarda un comando manual.")
             self.assistant_btn = QtWidgets.QPushButton("Asistente perfil")
@@ -2866,6 +3088,7 @@ def qt_main():
             for idx, button in enumerate(
                 [
                     self.open_protondb_btn,
+                    self.save_files_btn,
                     self.compare_btn,
                     self.history_btn,
                     self.display_diag_btn,
@@ -3046,6 +3269,7 @@ def qt_main():
             self.remove_game_btn.clicked.connect(self.remove_manual_game)
             self.recommend_btn.clicked.connect(self.show_recommendations)
             self.open_protondb_btn.clicked.connect(self.open_protondb)
+            self.save_files_btn.clicked.connect(self.open_save_files)
             self.apply_system_btn.clicked.connect(self.apply_system_recommended)
             self.apply_command_btn.clicked.connect(self.apply_prepared_command)
             self.add_option_btn.clicked.connect(self.add_custom_option)
@@ -3169,6 +3393,8 @@ def qt_main():
             self.remove_game_btn.setText(self.tr("remove_manual"))
             self.launch_btn.setText(self.tr("launch"))
             self.launch_btn.setToolTip(self.tr("launch_tip"))
+            self.save_files_btn.setText(self.tr("save_files"))
+            self.save_files_btn.setToolTip(self.tr("save_files_tip"))
             for index, label in enumerate(self.tr("tabs")):
                 self.tabs.setTabText(index, label)
             self.sys_box.setTitle(self.tr("system_recs"))
@@ -3606,6 +3832,7 @@ def qt_main():
             external = self.is_external_game()
             read_only = self.is_read_only()
             self.open_protondb_btn.setEnabled(not external)
+            self.save_files_btn.setEnabled(bool(self.current_game))
             self.recommend_btn.setEnabled(not external)
             self.launch_btn.setEnabled(bool(self.current_game))
             self.assistant_btn.setEnabled(bool(self.current_game))
@@ -5457,6 +5684,62 @@ def qt_main():
         def open_protondb(self):
             if self.current_game and not self.current_game.get("external"):
                 open_url(f"https://www.protondb.com/app/{self.current_game['appid']}")
+
+        def open_save_files(self):
+            if not self.current_game:
+                return
+            locations = save_location_candidates(self.root, self.current_game)
+            if not locations:
+                QtWidgets.QMessageBox.information(
+                    self,
+                    self.tx(
+                        "No se encontraron guardados",
+                        "No save files found",
+                    ),
+                    self.tx(
+                        "No he encontrado todavía una carpeta de guardado para "
+                        "este juego. Inícialo y guarda una partida al menos una vez.",
+                        "No save folder was found for this game yet. Launch it "
+                        "and save at least once.",
+                    ),
+                )
+                return
+
+            labels = [f"{label}\n{path}" for label, path in locations]
+            if len(locations) == 1:
+                selected_index = 0
+            else:
+                selected, accepted = QtWidgets.QInputDialog.getItem(
+                    self,
+                    self.tx(
+                        "Archivos guardados",
+                        "Save files",
+                    ),
+                    self.tx(
+                        "Selecciona la carpeta que quieres abrir:",
+                        "Select the folder to open:",
+                    ),
+                    labels,
+                    0,
+                    False,
+                )
+                if not accepted:
+                    return
+                selected_index = labels.index(selected)
+
+            path = locations[selected_index][1]
+            opened = QtGui.QDesktopServices.openUrl(
+                QtCore.QUrl.fromLocalFile(str(path.resolve()))
+            )
+            if not opened:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    self.tx("No se pudo abrir", "Could not open"),
+                    self.tx(
+                        f"No se pudo abrir esta carpeta:\n\n{path}",
+                        f"Could not open this folder:\n\n{path}",
+                    ),
+                )
 
         def external_base_command(self):
             if not self.current_game or not self.current_game.get("external"):

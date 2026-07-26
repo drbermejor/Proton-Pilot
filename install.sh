@@ -7,6 +7,7 @@ SRC_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/$APP_ID"
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 BIN_DIR="$HOME/.local/bin"
+PROCESS_SELECTOR_DESKTOP="$DESKTOP_DIR/proton-pilot-process-selector.desktop"
 INSTALL_DEPS="ask"
 
 usage() {
@@ -48,11 +49,18 @@ import vdf
 PY
 }
 
+python_has_tkinter() {
+  python3 - <<'PY' >/dev/null 2>&1
+import tkinter
+PY
+}
+
 missing_runtime_tools() {
   local missing=()
   need_cmd python3 || missing+=("python3")
   python_has_pyside6 || missing+=("PySide6")
   python_has_vdf || missing+=("python-vdf")
+  python_has_tkinter || missing+=("Tkinter (selector de procesos)")
   if ! need_cmd wrestool || ! need_cmd icotool; then
     missing+=("icoutils")
   fi
@@ -77,26 +85,26 @@ confirm() {
 }
 
 install_with_pacman() {
-  sudo pacman -S --needed python python-pyside6 python-vdf icoutils gamescope gamemode mangohud xdg-utils
+  sudo pacman -S --needed python python-pyside6 python-vdf tk icoutils gamescope gamemode mangohud xdg-utils
 }
 
 install_with_dnf() {
-  sudo dnf install -y python3 python3-pyside6 python3-vdf icoutils gamescope gamemode mangohud xdg-utils
+  sudo dnf install -y python3 python3-pyside6 python3-vdf python3-tkinter icoutils gamescope gamemode mangohud xdg-utils
 }
 
 install_with_rpm_ostree() {
-  sudo rpm-ostree install python3-pyside6 python3-vdf icoutils gamescope gamemode mangohud xdg-utils
+  sudo rpm-ostree install python3-pyside6 python3-vdf python3-tkinter icoutils gamescope gamemode mangohud xdg-utils
   echo
   echo "rpm-ostree installed packages. Reboot may be required before all dependencies are available."
 }
 
 install_with_apt() {
   sudo apt update
-  sudo apt install -y python3 python3-pyside6.qtwidgets python3-vdf icoutils gamescope gamemode mangohud xdg-utils
+  sudo apt install -y python3 python3-pyside6.qtwidgets python3-vdf python3-tk icoutils gamescope gamemode mangohud xdg-utils
 }
 
 install_with_zypper() {
-  sudo zypper install -y python3 python3-qt6 python3-vdf icoutils gamescope gamemode mangohud xdg-utils
+  sudo zypper install -y python3 python3-qt6 python3-vdf python3-tk icoutils gamescope gamemode mangohud xdg-utils
 }
 
 install_dependencies() {
@@ -131,7 +139,7 @@ install_dependencies() {
 Could not detect a supported package manager.
 
 Install these manually:
-  python3, PySide6, python-vdf/python3-vdf, icoutils, gamescope, gamemode, mangohud, xdg-utils
+  python3, PySide6, Tkinter, python-vdf/python3-vdf, icoutils, gamescope, gamemode, mangohud, xdg-utils
 EOF
   fi
 }
@@ -153,14 +161,20 @@ if ! python_has_vdf; then
   echo "Warning: python-vdf is unavailable. Adding external profiles to Steam shortcuts will not work." >&2
 fi
 
+if ! python_has_tkinter; then
+  echo "Warning: Tkinter is unavailable. The hung process selector will not start." >&2
+fi
+
 if ! need_cmd wrestool || ! need_cmd icotool; then
   echo "Warning: icoutils is unavailable. External executable icons will use the generic icon." >&2
 fi
 
-mkdir -p "$INSTALL_DIR/assets" "$DESKTOP_DIR" "$BIN_DIR"
+mkdir -p "$INSTALL_DIR/assets" "$INSTALL_DIR/tools" "$DESKTOP_DIR" "$BIN_DIR"
 install -m 755 "$SRC_DIR/proton-pilot.py" "$INSTALL_DIR/proton-pilot.py"
+install -m 755 "$SRC_DIR/tools/hung-process-selector.py" "$INSTALL_DIR/tools/hung-process-selector.py"
 install -m 644 "$SRC_DIR/assets/proton-pilot.png" "$INSTALL_DIR/assets/proton-pilot.png"
 install -m 644 "$SRC_DIR/README.md" "$INSTALL_DIR/README.md"
+install -m 644 "$SRC_DIR/packaging/proton-pilot-process-selector.desktop" "$PROCESS_SELECTOR_DESKTOP"
 
 cat > "$DESKTOP_DIR/proton-pilot.desktop" <<EOF
 [Desktop Entry]
@@ -174,6 +188,7 @@ Categories=Utility;Game;
 EOF
 
 ln -sf "$INSTALL_DIR/proton-pilot.py" "$BIN_DIR/proton-pilot"
+ln -sf "$INSTALL_DIR/tools/hung-process-selector.py" "$BIN_DIR/proton-pilot-process-selector"
 
 if need_cmd update-desktop-database; then
   update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
@@ -182,3 +197,4 @@ fi
 echo "Installed."
 echo "Run from your application menu as: $APP_NAME"
 echo "Or from terminal: proton-pilot"
+echo "Hung process selector: proton-pilot-process-selector"

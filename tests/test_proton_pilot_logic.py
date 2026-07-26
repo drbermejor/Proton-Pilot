@@ -211,6 +211,75 @@ class ProtonPilotLogicTests(unittest.TestCase):
         self.assertEqual(first.suffix, ".png")
         self.assertIn("icons", first.parts)
 
+    def test_finds_steam_cloud_and_proton_save_locations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Steam"
+            cloud = root / "userdata/123/42/remote"
+            game_saves = (
+                root
+                / "steamapps/compatdata/42/pfx/drive_c/users/steamuser"
+                / "AppData/Local/TestGame/Saved"
+            )
+            cloud.mkdir(parents=True)
+            game_saves.mkdir(parents=True)
+            game = {
+                "appid": "42",
+                "name": "Test Game",
+                "library": root,
+                "external": False,
+            }
+
+            locations = proton_pilot.save_location_candidates(root, game)
+            paths = {path.resolve() for _label, path in locations}
+
+            self.assertIn(cloud.resolve(), paths)
+            self.assertIn(game_saves.parent.resolve(), paths)
+
+    def test_finds_external_game_custom_prefix_save_location(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Steam"
+            prefix = Path(tmp) / "external-prefix"
+            game_saves = (
+                prefix
+                / "pfx/drive_c/users/steamuser/Documents/My Games"
+                / "HaloCampaignEvolved"
+            )
+            game_saves.mkdir(parents=True)
+            game = {
+                "appid": "external-halo",
+                "name": "Halo Campaign Evolved",
+                "external": True,
+                "prefix": str(prefix),
+            }
+
+            locations = proton_pilot.save_location_candidates(root, game)
+            paths = {path.resolve() for _label, path in locations}
+
+            self.assertIn(game_saves.resolve(), paths)
+
+    def test_finds_save_signature_when_internal_name_differs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "Steam"
+            prefix = Path(tmp) / "external-prefix"
+            save_dir = (
+                prefix
+                / "pfx/drive_c/users/steamuser/AppData/Local"
+                / "Meteorite/Saved/SaveGames"
+            )
+            save_dir.mkdir(parents=True)
+            (save_dir / "Progress.sav").write_bytes(b"test")
+            game = {
+                "appid": "external-halo",
+                "name": "Halo Campaign Evolved",
+                "external": True,
+                "prefix": str(prefix),
+            }
+
+            locations = proton_pilot.save_location_candidates(root, game)
+            paths = {path.resolve() for _label, path in locations}
+
+            self.assertIn(save_dir.resolve(), paths)
+
     def test_protondb_tier_helpers(self):
         summary = {"tier": "gold", "total": 182}
 

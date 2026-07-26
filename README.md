@@ -88,6 +88,12 @@ tocar `localconfig.vdf`.
 - Shows ProtonDB official summary data, colored ratings, and community launch hints when available.
 - Shows ProtonDB cache age and can refresh ProtonDB data from the recommendation dialog.
 - Opens the selected game's ProtonDB page.
+- Finds likely save-file folders for the selected game across Steam Cloud,
+  Proton prefixes, and common native Linux locations, then opens the chosen
+  folder in the file manager.
+- Includes a standalone hung-process selector that highlights Linux blocked
+  states and KWin unresponsive windows, preselects Gamescope, and can terminate
+  the full descendant process tree.
 - Can apply Unreal Engine HDR config tweaks for games that need them.
 - Can register the generated AppImage as a Steam non-Steam shortcut.
 - Can check the latest GitHub release and open the AppImage download page.
@@ -125,13 +131,22 @@ and creates:
 
 ```bash
 ~/.local/bin/proton-pilot
+~/.local/bin/proton-pilot-process-selector
 ~/.local/share/applications/proton-pilot.desktop
+~/.local/share/applications/proton-pilot-process-selector.desktop
 ```
 
 Run it from the application menu as **Proton Pilot**, or from a terminal:
 
 ```bash
 proton-pilot
+```
+
+The companion process selector is also available from the application menu or
+from a terminal:
+
+```bash
+proton-pilot-process-selector
 ```
 
 ## AppImage
@@ -164,6 +179,7 @@ sudo pacman -S fuse2
 
 - Python 3
 - PySide6 for the full GUI
+- Tkinter for the companion hung-process selector
 - `python-vdf` / `python3-vdf` for Steam non-Steam shortcut editing
 - Steam installed locally
 
@@ -173,6 +189,9 @@ Optional tools detected and used by presets:
 - `gamemoderun`
 - `mangohud`
 - `xdg-open`
+- `qdbus6`, Python D-Bus, and PyGObject for enhanced KWin unresponsive-window
+  detection in the process selector; its Linux process-state detection still
+  works without these optional integrations
 - `icoutils` (`wrestool` and `icotool`) for extracting icons from external
   Windows executables
 
@@ -434,6 +453,8 @@ and asks you to apply Steam-writing changes from Desktop Mode instead.
   into multiple rows on narrower screens to avoid clipped content.
 - Frequent actions and diagnostic/maintenance tools are separated into different
   groups to reduce visual noise.
+- `Save files` searches Steam Cloud, the selected game's Proton prefix, and
+  common Linux data/config locations, then lets you choose a folder to open.
 - The selected-game panel also warns when the command prepared on screen differs
   from the command already saved for that game.
 - `Compare` shows saved launch options next to the prepared command.

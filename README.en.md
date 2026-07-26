@@ -22,6 +22,7 @@ The installed command is:
 
 ```bash
 proton-pilot
+proton-pilot-process-selector
 ```
 
 ## AppImage
@@ -39,6 +40,11 @@ The output is created in `dist/`.
 - Detects installed Steam games and manually added games.
 - Reads and writes Steam launch options per game.
 - Shows and changes the Proton compatibility tool used by each game.
+- The `Save files` button searches Steam Cloud, the game's Proton prefix, and
+  common native Linux locations, then opens the selected folder.
+- Includes a standalone hung-process selector that highlights Linux/KWin
+  unresponsive states, preselects Gamescope, and can terminate its descendant
+  process tree.
 - Provides system recommendations based on GPU, display, session, and tools.
 - Provides Gamescope resolution forcing, HDR, VRR, FPS cap, handheld, RT/DXR,
   FSR4, Wayland, MangoHud, and GameMode toggles.
